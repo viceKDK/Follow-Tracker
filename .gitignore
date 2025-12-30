@@ -1,0 +1,30 @@
+# Data files (Sensitive)
+followers_1.json
+following.json
+seguidores_vs_seguidos.xlsx
+remplazar los 3 archvios de arriba para nueva info.txt
+
+# PyInstaller / Build artifacts
+build/
+dist/
+.dist/
+*.spec
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Images and Icons
+*.png
+*.jpg
+*.jpeg
+*.ico
+*.webp
+convert_icon.py
+check_transparency.py
