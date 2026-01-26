@@ -48,10 +48,19 @@ Ejecuta el script principal:
 python comparar_ig.py
 ```
 
-El script generará un archivo **Excel (.xlsx)** llamado `seguidores_vs_seguidos.xlsx` con tres columnas:
+El script generará un archivo **Excel (.xlsx)** llamado `seguidores_vs_seguidos.xlsx` con las siguientes columnas:
+
+### Columnas principales:
 - **Nos seguimos**: Personas con follow mutuo.
-- **No me sigue**: Personas a las que sigues pero que no te siguen de vuelta.
 - **No lo sigo**: Personas que te siguen pero a las que tú no sigues.
+- **No me sigue**: Personas a las que sigues pero que no te siguen de vuelta.
+
+### Columnas de comparación:
+- **Nuevos Seguidores**: Personas que te empezaron a seguir desde la última vez que ejecutaste el análisis.
+- **Nuevos Siguiendo**: Personas que empezaste a seguir desde la última vez que ejecutaste el análisis.
+
+> [!NOTE]
+> Las columnas de comparación estarán vacías en la primera ejecución. A partir de la segunda ejecución, el script comparará automáticamente con los datos anteriores y mostrará los nuevos seguidores y seguidos.
 
 ## ⚖️ Licencia
 
