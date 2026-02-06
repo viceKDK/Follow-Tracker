@@ -66,8 +66,12 @@ def preguntar_modo():
 
     root = tk.Tk()
     root.title("Follow Tracker - Inicio")
-    root.geometry("800x620")
-    root.minsize(800, 620)
+    root.geometry("1000x720")
+    root.minsize(900, 640)
+    try:
+        root.state("zoomed")
+    except Exception:
+        pass
     root.configure(bg="#f4f7fb")
 
     card = tk.Frame(root, bg="white", bd=1, relief="solid")
@@ -84,7 +88,7 @@ def preguntar_modo():
 
     subtitle = tk.Label(
         card,
-        text="Puedes usar JSON en carpeta yo, cargar CSV manuales o usar AUTO completo.",
+        text="El flujo recomendado para cuentas externas es AUTO 1-click (esperar).",
         font=("Segoe UI", 10),
         bg="white",
         fg="#4a5568",
@@ -120,39 +124,9 @@ def preguntar_modo():
         anchor="w",
     ).pack(fill="x")
 
-    external_box = tk.LabelFrame(
-        card,
-        text="Modo 2: Otra cuenta (CSV del smart_scraper.js)",
-        font=("Segoe UI", 10, "bold"),
-        bg="white",
-        fg="#b54708",
-        padx=12,
-        pady=10,
-    )
-    external_box.pack(fill="x", padx=18, pady=(0, 10))
-
-    external_text = (
-        "Pasos obligatorios:\n"
-        "1. Abre Instagram y entra al perfil de esa persona.\n"
-        "2. Abre su lista de Seguidores y ejecuta el scraper. Guarda el CSV.\n"
-        "3. Abre su lista de Seguidos y ejecuta el scraper otra vez. Guarda el CSV.\n"
-        "4. Vuelve aqui y selecciona esos 2 CSV.\n\n"
-        "Nota: no hace falta tener 2 ventanas al mismo tiempo. Se hace primero una lista y despues la otra."
-    )
-    tk.Label(
-        external_box,
-        text=external_text,
-        font=("Segoe UI", 10),
-        bg="white",
-        fg="#2d3748",
-        justify="left",
-        anchor="w",
-        wraplength=700,
-    ).pack(fill="x")
-
     auto_box = tk.LabelFrame(
         card,
-        text="Modo 3: Otra cuenta (AUTO)",
+        text="Modo 2: Otra cuenta (AUTO 1-click)",
         font=("Segoe UI", 10, "bold"),
         bg="white",
         fg="#155724",
@@ -187,14 +161,6 @@ def preguntar_modo():
         selected_mode["value"] = "local"
         root.destroy()
 
-    def choose_external():
-        selected_mode["value"] = "external"
-        root.destroy()
-
-    def choose_auto():
-        selected_mode["value"] = "auto"
-        root.destroy()
-
     def choose_auto_wait():
         selected_mode["value"] = "auto_wait"
         root.destroy()
@@ -215,36 +181,6 @@ def preguntar_modo():
         pady=8,
         relief="flat",
         command=choose_local,
-        cursor="hand2",
-    ).pack(side="left", padx=(0, 10))
-
-    tk.Button(
-        buttons,
-        text="Analizar otra cuenta (CSV)",
-        font=("Segoe UI", 10, "bold"),
-        bg="#b54708",
-        fg="white",
-        activebackground="#93370a",
-        activeforeground="white",
-        padx=14,
-        pady=8,
-        relief="flat",
-        command=choose_external,
-        cursor="hand2",
-    ).pack(side="left", padx=(0, 10))
-
-    tk.Button(
-        buttons,
-        text="Analizar otra cuenta (AUTO)",
-        font=("Segoe UI", 10, "bold"),
-        bg="#1f9d55",
-        fg="white",
-        activebackground="#187a43",
-        activeforeground="white",
-        padx=14,
-        pady=8,
-        relief="flat",
-        command=choose_auto,
         cursor="hand2",
     ).pack(side="left", padx=(0, 10))
 
@@ -692,8 +628,6 @@ def procesar_datos():
 
         if choice == "local":
             data = cargar_modo_mi_cuenta(base_path)
-        elif choice == "auto":
-            data = cargar_modo_otra_cuenta_auto(base_path)
         elif choice == "auto_wait":
             data = cargar_modo_otra_cuenta_auto_wait(base_path)
         else:

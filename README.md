@@ -9,6 +9,7 @@ Herramienta para comparar seguidores y seguidos de Instagram, tanto de tu cuenta
 ## Novedades
 
 - Flujo de `1 solo EXE` con modo `AUTO 1-click (esperar)`.
+- Extension de navegador `1 clic` sin consola (`extension/`).
 - Carpeta fija `yo/` para tus JSON descargados de Instagram.
 - Scraper automático por perfil externo: primero followers, luego following.
 - Generación automática de carpeta por usuario externo con:
@@ -50,6 +51,23 @@ Salida final en carpeta por usuario (dentro del proyecto):
 - `<usuario>/followers.csv`
 - `<usuario>/following.csv`
 - `<usuario>/seguidores_vs_seguidos.xlsx`
+
+## Uso 0 pasos tecnicos (Extension)
+
+Si quieres evitar consola y pasos tecnicos, usa la extension incluida en `extension/`.
+
+1. Abre `chrome://extensions` o `edge://extensions`.
+2. Activa `Modo desarrollador`.
+3. Pulsa `Cargar descomprimida`.
+4. Selecciona la carpeta `extension` de este proyecto.
+5. Abre Instagram en el perfil objetivo.
+6. Abre el popup de la extension y pulsa `Iniciar analisis`.
+
+Resultado automatico por descarga:
+
+- `ig_auto_<perfil>_followers_<ts>.csv`
+- `ig_auto_<perfil>_following_<ts>.csv`
+- `ig_auto_<perfil>_seguidores_vs_seguidos_<fecha>.xls` (compatible con Excel, incluye `Ultimo Scrapeo`)
 
 ## Uso para desarrolladores (Python)
 
