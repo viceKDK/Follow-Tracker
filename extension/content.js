@@ -1,10 +1,15 @@
 (function () {
   const CONFIG = {
     maxUsers: 10000,
-    minWaitMs: 1800,
-    maxWaitMs: 4200,
+    minWaitMs: 1200,
+    maxWaitMs: 2600,
     stagnantAttempts: 14,
     phaseDelayMs: 1200,
+    continuityWindow: 8,
+    continuityTail: 4,
+    continuityMinOverlap: 2,
+    apiMaxAttempts: 3,
+    apiRetryDelayMs: 1800,
   };
 
   const PHASES = [
@@ -107,6 +112,194 @@
     return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
   }
 
+  function getCookie(name) {
+    const parts = document.cookie.split(";").map((x) => x.trim());
+    for (const p of parts) {
+      if (p.startsWith(`${name}=`)) return decodeURIComponent(p.slice(name.length + 1));
+    }
+    return "";
+  }
+
+  function getApiHeaders() {
+    return {
+      "x-csrftoken": getCookie("csrftoken"),
+      "x-ig-app-id": "936619743392459",
+      "x-requested-with": "XMLHttpRequest",
+      accept: "*/*",
+    };
+  }
+
+  function storageGet(key) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get([key], (obj) => resolve(obj && obj[key] ? obj[key] : null));
+    });
+  }
+
+  function storageSet(obj) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set(obj, () => resolve());
+    });
+  }
+
+  function cacheKeyForProfile(profile) {
+    return `ft_cache_${toSafeFilePart(profile)}`;
+  }
+
+  function mergeRowsByUsername(aRows, bRows) {
+    const map = new Map();
+    (aRows || []).forEach((r) => {
+      if (!r || !r.username) return;
+      map.set(r.username, { username: r.username, fullName: r.fullName || "Sin Nombre" });
+    });
+    (bRows || []).forEach((r) => {
+      if (!r || !r.username) return;
+      map.set(r.username, { username: r.username, fullName: r.fullName || "Sin Nombre" });
+    });
+    return Array.from(map.values()).sort((x, y) => x.username.localeCompare(y.username));
+  }
+
+  async function mergeWithProfileCache(profile, phaseKey, rows) {
+    const key = cacheKeyForProfile(profile);
+    const cache = (await storageGet(key)) || { followers: [], following: [], updatedAt: null };
+    const prevRows = Array.isArray(cache[phaseKey]) ? cache[phaseKey] : [];
+    const merged = mergeRowsByUsername(prevRows, rows || []);
+    cache[phaseKey] = merged;
+    cache.updatedAt = new Date().toISOString();
+    await storageSet({ [key]: cache });
+    sendProgress(`${phaseKey}: cache acumulada ${merged.length} usuarios`);
+    return merged;
+  }
+
+  async function igFetchJson(url) {
+    const res = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      headers: getApiHeaders(),
+    });
+    if (!res.ok) {
+      throw new Error(`API ${res.status} en ${url}`);
+    }
+    return res.json();
+  }
+
+  async function getProfileInfoApi(username) {
+    const url = `/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
+    const json = await igFetchJson(url);
+    const user = json && json.data && json.data.user;
+    if (!user || !user.id) throw new Error("No se pudo obtener user_id via API.");
+    return {
+      id: user.id,
+      followersCount: (user.edge_followed_by && user.edge_followed_by.count) || null,
+      followingCount: (user.edge_follow && user.edge_follow.count) || null,
+    };
+  }
+
+  function mapApiUser(u) {
+    const username = normalizeUsernameCandidate(u && u.username);
+    if (!username) return null;
+    const fullName = String((u && u.full_name) || "Sin Nombre").replace(/,/g, " ");
+    return { username, fullName };
+  }
+
+  async function paginateFriendshipApi(userId, phaseKey, expectedCount) {
+    const out = [];
+    const seen = new Set();
+    let maxId = null;
+    let page = 0;
+
+    while (page < 300) {
+      const endpoint = phaseKey === "followers" ? "followers" : "following";
+      const qs = new URLSearchParams();
+      qs.set("count", "200");
+      if (maxId) qs.set("max_id", maxId);
+      const url = `/api/v1/friendships/${userId}/${endpoint}/?${qs.toString()}`;
+      const json = await igFetchJson(url);
+      const users = Array.isArray(json && json.users) ? json.users : [];
+
+      let added = 0;
+      users.forEach((u) => {
+        const m = mapApiUser(u);
+        if (!m) return;
+        if (seen.has(m.username)) return;
+        seen.add(m.username);
+        out.push(m);
+        added += 1;
+      });
+
+      page += 1;
+      sendProgress(
+        `${phaseKey} [API]: ${out.length} usuarios (+${added})` +
+          (expectedCount ? ` de ${expectedCount}` : "")
+      );
+      setOverlay(getProfileFromPath(), `${phaseKey} api`, out.length, `Pagina ${page} (+${added})`, "#a2f3a6");
+
+      maxId = (json && (json.next_max_id || json.max_id)) || null;
+      const hasMore = !!(json && (json.big_list || json.has_next_page || maxId));
+      if (!hasMore || !maxId || users.length === 0) break;
+      await sleep(420);
+    }
+
+    return out;
+  }
+
+  function isCompleteEnough(actual, expected) {
+    if (!Number.isFinite(expected) || expected <= 0) return true;
+    // Tolerancia chica por diferencias de privacidad/render temporal.
+    const minAllowed = Math.max(expected - 3, Math.floor(expected * 0.98));
+    return actual >= minAllowed;
+  }
+
+  function buildCsvFromRows(rows, scrapeTime) {
+    return [
+      "Usuario,Nombre,Timestamp",
+      ...rows.map((r) => `${escapeCsvValue(r.username)},${escapeCsvValue(r.fullName)},${scrapeTime}`),
+    ].join("\n");
+  }
+
+  async function runApiMode(profile) {
+    sendProgress("Intentando modo API...");
+    const info = await getProfileInfoApi(profile);
+    sendProgress(
+      `API profile ok: user_id=${info.id}, followers=${info.followersCount || "?"}, following=${info.followingCount || "?"}`
+    );
+
+    const followersRowsRaw = await paginateFriendshipApi(info.id, "followers", info.followersCount);
+    const followingRowsRaw = await paginateFriendshipApi(info.id, "following", info.followingCount);
+    const followersRows = await mergeWithProfileCache(profile, "followers", followersRowsRaw);
+    const followingRows = await mergeWithProfileCache(profile, "following", followingRowsRaw);
+    if (followersRows.length === 0 && followingRows.length === 0) {
+      throw new Error("API devolvio 0 usuarios en ambas listas.");
+    }
+    if (!isCompleteEnough(followersRows.length, info.followersCount)) {
+      throw new Error(
+        `API followers incompleto (${followersRows.length}/${info.followersCount}).`
+      );
+    }
+    if (!isCompleteEnough(followingRows.length, info.followingCount)) {
+      throw new Error(
+        `API following incompleto (${followingRows.length}/${info.followingCount}).`
+      );
+    }
+
+    const ts = nowIso();
+    const safeProfile = toSafeFilePart(profile);
+    const followersCsvName = `ig_auto_${safeProfile}_followers_${Date.now()}.csv`;
+    const followersCsv = buildCsvFromRows(followersRows, ts);
+    downloadText(followersCsvName, followersCsv, "text/csv;charset=utf-8;");
+    sendProgress(`CSV followers descargado: ${followersCsvName}`);
+
+    const followingCsvName = `ig_auto_${safeProfile}_following_${Date.now()}.csv`;
+    const followingCsv = buildCsvFromRows(followingRows, ts);
+    downloadText(followingCsvName, followingCsv, "text/csv;charset=utf-8;");
+    sendProgress(`CSV following descargado: ${followingCsvName}`);
+
+    const comparison = buildComparison(followersRows, followingRows);
+    const reportHtml = buildExcelHtml(profile, comparison, ts);
+    const reportName = `ig_auto_${safeProfile}_seguidores_vs_seguidos_${nowCompact()}.xls`;
+    downloadText(reportName, reportHtml, "application/vnd.ms-excel;charset=utf-8;");
+    sendProgress(`Excel compatible descargado: ${reportName}`);
+  }
+
   function toSafeFilePart(text) {
     return String(text || "")
       .replace(/[^a-zA-Z0-9._-]/g, "_")
@@ -121,6 +314,68 @@
       return `"${s.replace(/"/g, '""')}"`;
     }
     return s;
+  }
+
+  function normalizeUsernameCandidate(text) {
+    const raw = String(text || "").trim().toLowerCase();
+    if (!raw) return null;
+    const cleaned = raw.replace(/^@+/, "").replace(/[^a-z0-9._]/g, "");
+    if (!cleaned) return null;
+    if (!/^[a-z0-9._]+$/.test(cleaned)) return null;
+    if (cleaned.length < 2) return null;
+    return cleaned;
+  }
+
+  function collectVisibleUsernames(scopeEl) {
+    const names = [];
+    const seen = new Set();
+    const root = scopeEl || document;
+
+    const anchors = root.querySelectorAll("a[href]");
+    anchors.forEach((a) => {
+      const href = a.getAttribute("href") || "";
+      if (!href) return;
+      let path = href;
+      if (href.startsWith("http://") || href.startsWith("https://")) {
+        try {
+          path = new URL(href).pathname;
+        } catch (_e) {
+          return;
+        }
+      }
+      const username = normalizeUsernameCandidate(path.split("/").filter(Boolean)[0] || "");
+      if (!username) return;
+      if (seen.has(username)) return;
+      seen.add(username);
+      names.push(username);
+    });
+
+    if (names.length === 0) {
+      const rows = root.querySelectorAll("li, div[role='button'], div[role='listitem']");
+      rows.forEach((row) => {
+        const text = (row.innerText || "").trim();
+        if (!text) return;
+        const first = text.split("\n").map((x) => x.trim()).filter(Boolean)[0] || "";
+        const username = normalizeUsernameCandidate(first);
+        if (!username) return;
+        if (seen.has(username)) return;
+        seen.add(username);
+        names.push(username);
+      });
+    }
+
+    return names;
+  }
+
+  function continuityOverlap(prevVisible, currVisible) {
+    if (!prevVisible || !currVisible) return CONFIG.continuityMinOverlap;
+    const prevTail = prevVisible.slice(-CONFIG.continuityTail);
+    const currHead = currVisible.slice(0, CONFIG.continuityWindow);
+    let overlap = 0;
+    prevTail.forEach((u) => {
+      if (currHead.includes(u)) overlap += 1;
+    });
+    return overlap;
   }
 
   function downloadText(filename, content, mimeType) {
@@ -144,9 +399,24 @@
   function onProfilePage() {
     if (!window.location.hostname.includes("instagram.com")) return false;
     const parts = window.location.pathname.split("/").filter(Boolean);
-    if (parts.length !== 1) return false;
-    const blocked = new Set(["explore", "accounts", "reels", "direct", "stories"]);
-    return !blocked.has(parts[0]);
+    if (parts.length === 0) return false;
+    const first = parts[0];
+    const blocked = new Set([
+      "explore",
+      "accounts",
+      "reels",
+      "direct",
+      "stories",
+      "challenge",
+      "about",
+      "developers",
+      "legal",
+      "api",
+      "p",
+      "tv",
+    ]);
+    if (blocked.has(first)) return false;
+    return /^[a-zA-Z0-9._]+$/.test(first);
   }
 
   function findPhaseTrigger(phase) {
@@ -261,7 +531,7 @@
     return changed;
   }
 
-  function findScrollableContainer() {
+  function getScrollableCandidates() {
     const dialog = document.querySelector('div[role="dialog"]');
     if (!dialog) throw new Error("No hay dialogo abierto.");
 
@@ -297,13 +567,16 @@
     }
 
     candidates.sort((a, b) => scoreContainer(b) - scoreContainer(a));
+    return candidates;
+  }
 
+  function findScrollableContainer() {
+    const candidates = getScrollableCandidates();
     for (const el of candidates) {
       if (canScrollElement(el)) {
         return el;
       }
     }
-
     return candidates[0];
   }
 
@@ -311,6 +584,8 @@
     const dialog = document.querySelector('div[role="dialog"]') || container;
     const links = dialog.querySelectorAll("a[href]");
     let added = 0;
+
+    // 1) Escaneo por links (rápido y fiable cuando href existe).
     links.forEach((el) => {
       const href = el.getAttribute("href") || "";
       if (!href) return;
@@ -334,7 +609,7 @@
         }
       }
       if (!path.startsWith("/")) return;
-      const username = path.split("/").filter(Boolean)[0] || "";
+      const username = normalizeUsernameCandidate(path.split("/").filter(Boolean)[0] || "");
       if (!username || !/^[a-zA-Z0-9._]+$/.test(username)) return;
       if (map.has(username)) return;
 
@@ -346,15 +621,99 @@
       map.set(username, { username, fullName });
       added += 1;
     });
+
+    // 2) Escaneo 1x1 por filas visibles (fallback para virtualización sin href estable).
+    const rows = dialog.querySelectorAll("li, div[role='button'], div[role='listitem']");
+    rows.forEach((row) => {
+      if (!(row instanceof HTMLElement)) return;
+      const text = (row.innerText || "").trim();
+      if (!text) return;
+      const lines = text
+        .split("\n")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      if (lines.length === 0) return;
+
+      // Tomamos la primera línea como posible username.
+      const username = normalizeUsernameCandidate(lines[0]);
+      if (!username) return;
+      if (map.has(username)) return;
+
+      // Evitar capturar textos UI.
+      if (
+        username.includes("follow") ||
+        username.includes("seguir") ||
+        username.includes("message") ||
+        username.includes("enviar")
+      ) {
+        return;
+      }
+
+      const fullName = lines.length > 1 ? lines[1].replace(/,/g, " ") : "Sin Nombre";
+      map.set(username, { username, fullName });
+      added += 1;
+    });
+
     return added;
+  }
+
+  async function slowSweep(container, map, phaseKey) {
+    // Barrido lento para listas virtualizadas: recorre en pasos pequenos
+    // para evitar saltarse celdas que cargan tarde.
+    let totalAdded = 0;
+    container.scrollTop = 0;
+    await sleep(700);
+    totalAdded += extractUsers(container, map);
+
+    const step = Math.max(180, Math.floor(container.clientHeight * 0.35));
+    let guard = 0;
+    while (guard < 2500) {
+      const before = container.scrollTop;
+      container.scrollTop = Math.min(container.scrollTop + step, container.scrollHeight);
+      container.dispatchEvent(new WheelEvent("wheel", { deltaY: step, bubbles: true }));
+      await sleep(320);
+      totalAdded += extractUsers(container, map);
+      if (container.scrollTop === before) break;
+      guard += 1;
+    }
+    sendProgress(`${phaseKey}: barrido lento completo (+${totalAdded})`);
+    return totalAdded;
+  }
+
+  async function deepRescan(container, map, phaseKey) {
+    // Reescaneo profundo: 2 pasadas completas con pasos muy cortos.
+    let totalAdded = 0;
+    const passes = 2;
+    for (let p = 1; p <= passes; p += 1) {
+      container.scrollTop = 0;
+      await sleep(900);
+      totalAdded += extractUsers(container, map);
+
+      const step = Math.max(120, Math.floor(container.clientHeight * 0.22));
+      let guard = 0;
+      while (guard < 5000) {
+        const before = container.scrollTop;
+        container.scrollTop = Math.min(container.scrollTop + step, container.scrollHeight);
+        container.dispatchEvent(new WheelEvent("wheel", { deltaY: step, bubbles: true }));
+        await sleep(420);
+        totalAdded += extractUsers(container, map);
+        if (container.scrollTop === before) break;
+        guard += 1;
+      }
+      sendProgress(`${phaseKey}: deep-rescan pasada ${p}/${passes} (+${totalAdded})`);
+    }
+    return totalAdded;
   }
 
   async function scrapeCurrentDialog(phase, profile, expectedCount) {
     const data = new Map();
-    const container = findScrollableContainer();
+    let candidates = getScrollableCandidates();
+    let activeIndex = 0;
+    let container = candidates[activeIndex] || findScrollableContainer();
     let stagnant = 0;
     let prevCount = 0;
     let recoveries = 0;
+    let prevVisible = collectVisibleUsernames(document.querySelector('div[role="dialog"]') || container);
 
     // Toma inicial de elementos visibles antes de empezar a mover.
     extractUsers(container, data);
@@ -367,17 +726,40 @@
     while (data.size < CONFIG.maxUsers) {
       const startTop = container.scrollTop;
       const jump = Math.max(700, Math.floor(container.clientHeight * 0.8));
-      container.scrollTop = Math.min(container.scrollTop + jump, container.scrollHeight);
-      container.scrollBy(0, jump);
-      container.dispatchEvent(new WheelEvent("wheel", { deltaY: jump, bubbles: true }));
+      // Micro-scroll en 3 pasos para no saltar filas virtualizadas.
+      for (let i = 0; i < 3; i += 1) {
+        const mini = Math.floor(jump / 3);
+        container.scrollTop = Math.min(container.scrollTop + mini, container.scrollHeight);
+        container.scrollBy(0, mini);
+        container.dispatchEvent(new WheelEvent("wheel", { deltaY: mini, bubbles: true }));
+        await sleep(180);
+      }
       if (container.scrollTop === startTop) {
         container.scrollTop = startTop + jump;
       }
       await randomSleep();
 
+      const currVisible = collectVisibleUsernames(document.querySelector('div[role="dialog"]') || container);
+      const overlap = continuityOverlap(prevVisible, currVisible);
+      if (prevVisible.length > 0 && currVisible.length > 0 && overlap < CONFIG.continuityMinOverlap) {
+        sendProgress(
+          `${phase.key}: continuidad baja (${overlap}/${CONFIG.continuityTail}), aplicando scroll correctivo`
+        );
+        // Correccion: retroceder un poco y avanzar con paso menor para no saltar usuarios.
+        container.scrollTop = Math.max(0, container.scrollTop - Math.floor(container.clientHeight * 0.6));
+        await sleep(700);
+        const mini = Math.max(160, Math.floor(container.clientHeight * 0.25));
+        for (let k = 0; k < 3; k += 1) {
+          container.scrollTop = Math.min(container.scrollTop + mini, container.scrollHeight);
+          await sleep(260);
+          extractUsers(container, data);
+        }
+      }
+
       const added = extractUsers(container, data);
       setOverlay(profile, phase.key, data.size, `En curso (+${added})`, "#a2f3a6");
       sendProgress(`${phase.key}: ${data.size} usuarios (+${added})`);
+      prevVisible = currVisible;
 
       const countUnchanged = data.size === prevCount;
       if (added === 0 && countUnchanged) {
@@ -396,8 +778,43 @@
             container.scrollTop = container.scrollHeight;
             container.dispatchEvent(new WheelEvent("wheel", { deltaY: 1800, bubbles: true }));
             await sleep(3000 + recoveries * 800);
+            await slowSweep(container, data, phase.key);
+
+            // Fallback: probar otros contenedores de scroll del modal.
+            candidates = getScrollableCandidates();
+            let switched = false;
+            for (let idx = 0; idx < candidates.length; idx += 1) {
+              if (idx === activeIndex) continue;
+              const beforeTry = data.size;
+              const candidate = candidates[idx];
+              candidate.scrollTop = candidate.scrollHeight;
+              candidate.dispatchEvent(new WheelEvent("wheel", { deltaY: 1400, bubbles: true }));
+              await sleep(1200);
+              await slowSweep(candidate, data, phase.key);
+              if (data.size > beforeTry) {
+                activeIndex = idx;
+                container = candidate;
+                switched = true;
+                sendProgress(`${phase.key}: cambio a contenedor alternativo #${idx}`);
+                break;
+              }
+            }
+            if (!switched) {
+              // Espera extra antes de volver al loop, para permitir carga lazy.
+              await sleep(1800 + recoveries * 600);
+            }
             stagnant = 0;
             continue;
+          }
+          // Ultimo intento antes de cerrar fase: reescaneo profundo completo.
+          if (clearlyIncomplete) {
+            sendProgress(`${phase.key}: ejecutando deep-rescan final (${data.size}/${expectedCount})`);
+            await deepRescan(container, data, phase.key);
+            if (data.size < Math.floor(expectedCount * 0.98)) {
+              sendProgress(
+                `${phase.key}: final parcial ${data.size}/${expectedCount} (Instagram no entrego mas items visibles)`
+              );
+            }
           }
           break;
         }
@@ -422,6 +839,10 @@
     const followersSet = new Set(followersRows.map((r) => r.username));
     const followingSet = new Set(followingRows.map((r) => r.username));
 
+    // Reglas:
+    // Nos seguimos: en ambos sets
+    // No lo sigo: me sigue pero yo no lo sigo => followers - following
+    // No me sigue: yo lo sigo pero el no me sigue => following - followers
     const nos = [...followersSet].filter((u) => followingSet.has(u)).sort();
     const noLoSigo = [...followersSet].filter((u) => !followingSet.has(u)).sort();
     const noMeSigue = [...followingSet].filter((u) => !followersSet.has(u)).sort();
@@ -430,7 +851,12 @@
   }
 
   function buildExcelHtml(profile, comparison, scrapeTime) {
-    const maxLen = Math.max(comparison.nos.length, comparison.noLoSigo.length, comparison.noMeSigue.length, 1);
+    const maxLen = Math.max(
+      comparison.nos.length,
+      comparison.noLoSigo.length,
+      comparison.noMeSigue.length,
+      1
+    );
     const rowHtml = [];
     for (let i = 0; i < maxLen; i += 1) {
       rowHtml.push(
@@ -438,6 +864,8 @@
           `<td>${comparison.nos[i] || ""}</td>` +
           `<td>${comparison.noLoSigo[i] || ""}</td>` +
           `<td>${comparison.noMeSigue[i] || ""}</td>` +
+          `<td></td>` +
+          `<td></td>` +
           `<td>${scrapeTime}</td>` +
           `</tr>`
       );
@@ -450,6 +878,8 @@
       `<th>Nos seguimos (${comparison.nos.length})</th>` +
       `<th>No lo sigo (${comparison.noLoSigo.length})</th>` +
       `<th>No me sigue (${comparison.noMeSigue.length})</th>` +
+      `<th>Nuevos Seguidores (0)</th>` +
+      `<th>Nuevos Siguiendo (0)</th>` +
       `<th>Ultimo Scrapeo</th>` +
       `</tr></thead>` +
       `<tbody>${rowHtml.join("")}</tbody>` +
@@ -470,30 +900,69 @@
       setOverlay(profile, "preparando", 0, "Iniciando analisis...", "#a2f3a6");
       sendProgress(`Perfil detectado: ${profile}`);
 
-      const phaseResults = {};
-      for (const phase of PHASES) {
-        setOverlay(profile, phase.key, 0, `Abriendo ${phase.key}...`, "#a2f3a6");
-        sendProgress(`Abriendo ${phase.key}...`);
-        const phaseMeta = await openDialogForPhase(phase);
-        await sleep(650);
-        phaseResults[phase.key] = await scrapeCurrentDialog(
-          phase,
-          profile,
-          phaseMeta && Number.isFinite(phaseMeta.expectedCount) ? phaseMeta.expectedCount : null
-        );
-        sendProgress(`CSV ${phase.key} descargado: ${phaseResults[phase.key].filename}`);
-        await closeDialog();
-        await sleep(CONFIG.phaseDelayMs);
+      let usedApi = false;
+      let lastApiError = null;
+      for (let attempt = 1; attempt <= CONFIG.apiMaxAttempts; attempt += 1) {
+        try {
+          sendProgress(`Intento API ${attempt}/${CONFIG.apiMaxAttempts}...`);
+          await runApiMode(profile);
+          usedApi = true;
+          break;
+        } catch (apiError) {
+          lastApiError = apiError;
+          sendProgress(`Intento API ${attempt} fallo: ${apiError.message}`);
+          if (attempt < CONFIG.apiMaxAttempts) {
+            await sleep(CONFIG.apiRetryDelayMs);
+          }
+        }
       }
 
-      const comparison = buildComparison(phaseResults.followers.rows, phaseResults.following.rows);
-      const scrapeTime = phaseResults.following.scrapeTimestamp || nowIso();
-      const reportHtml = buildExcelHtml(profile, comparison, scrapeTime);
-      const reportName = `ig_auto_${toSafeFilePart(profile)}_seguidores_vs_seguidos_${nowCompact()}.xls`;
-      downloadText(reportName, reportHtml, "application/vnd.ms-excel;charset=utf-8;");
+      if (!usedApi) {
+        sendProgress(
+          `Modo API fallo tras ${CONFIG.apiMaxAttempts} intentos: ${
+            (lastApiError && lastApiError.message) || "error desconocido"
+          }`
+        );
+        sendProgress("Pasando a modo UI...");
+      }
 
-      setOverlay(profile, "completo", comparison.nos.length + comparison.noLoSigo.length + comparison.noMeSigue.length, "Finalizado y descargado", "#7de8c6");
-      sendProgress(`Excel compatible descargado: ${reportName}`);
+      if (!usedApi) {
+        const phaseResults = {};
+        for (const phase of PHASES) {
+          setOverlay(profile, phase.key, 0, `Abriendo ${phase.key}...`, "#a2f3a6");
+          sendProgress(`Abriendo ${phase.key}...`);
+          const phaseMeta = await openDialogForPhase(phase);
+          await sleep(650);
+          phaseResults[phase.key] = await scrapeCurrentDialog(
+            phase,
+            profile,
+            phaseMeta && Number.isFinite(phaseMeta.expectedCount) ? phaseMeta.expectedCount : null
+          );
+          sendProgress(`CSV ${phase.key} descargado: ${phaseResults[phase.key].filename}`);
+          await closeDialog();
+          await sleep(CONFIG.phaseDelayMs);
+        }
+
+        const comparison = buildComparison(phaseResults.followers.rows, phaseResults.following.rows);
+        const mergedFollowersRows = await mergeWithProfileCache(profile, "followers", phaseResults.followers.rows);
+        const mergedFollowingRows = await mergeWithProfileCache(profile, "following", phaseResults.following.rows);
+        const mergedComparison = buildComparison(mergedFollowersRows, mergedFollowingRows);
+        const scrapeTime = phaseResults.following.scrapeTimestamp || nowIso();
+        const reportHtml = buildExcelHtml(profile, mergedComparison, scrapeTime);
+        const reportName = `ig_auto_${toSafeFilePart(profile)}_seguidores_vs_seguidos_${nowCompact()}.xls`;
+        downloadText(reportName, reportHtml, "application/vnd.ms-excel;charset=utf-8;");
+        sendProgress(`Excel compatible descargado: ${reportName}`);
+        setOverlay(
+          profile,
+          "completo",
+          mergedComparison.nos.length + mergedComparison.noLoSigo.length + mergedComparison.noMeSigue.length,
+          "Finalizado (modo UI)",
+          "#7de8c6"
+        );
+      } else {
+        setOverlay(profile, "completo", 0, "Finalizado (modo API)", "#7de8c6");
+      }
+
       sendDone();
     } catch (error) {
       setOverlay(getProfileFromPath(), "error", 0, `Error: ${error.message || "desconocido"}`, "#ff9a9a");
