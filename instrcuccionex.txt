@@ -1,0 +1,561 @@
+Tu plan es bueno, pero podemos mejorarlo con técnicas más robustas, mayor seguridad y eficiencia. Aquí está la versión optimizada con mejores prácticas:
+
+🔧 Script Mejorado con Características Avanzadas
+javascript
+// ================= CONFIGURACIÓN AVANZADA =================
+const CONFIG = {
+    MAX_USERS: 2000,              // Máximo de seguidores a recolectar
+    MIN_WAIT_MS: 2500,           // Mínimo tiempo de espera (más humano)
+    MAX_WAIT_MS: 7000,           // Máximo tiempo de espera
+    SCROLL_INCREMENT: 400,       // Scroll suave en incrementos
+    MAX_STAGNANT_ATTEMPTS: 3,    // Intentos antes de detener
+    BATCH_SIZE: 50,              // Guardar en lotes para evitar pérdidas
+    SAVE_EVERY_X_USERS: 100      // Guardar automático cada X usuarios
+};
+
+// ================= UTILIDADES =================
+class InstagramScraper {
+    constructor(config) {
+        this.config = config;
+        this.data = new Map(); // Usamos Map para mejor performance
+        this.isRunning = false;
+        this.startTime = null;
+        this.batchCounter = 0;
+        this.ui = this.createUI();
+    }
+
+    // Crear interfaz visual para monitoreo
+    createUI() {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 999999;
+            font-family: Arial, sans-serif;
+            min-width: 250px;
+            border: 2px solid #405de6;
+        `;
+        
+        container.innerHTML = `
+            <h3 style="margin:0 0 10px 0;color:#E1306C">🛡️ IG Scraper Seguro</h3>
+            <div id="scraper-stats">
+                <div>✅ Recolectados: <span id="count">0</span></div>
+                <div>⏱️ Tiempo: <span id="time">00:00</span></div>
+                <div>📈 Velocidad: <span id="speed">0/min</span></div>
+                <div id="status" style="color:#00ff00">▶️ Iniciando...</div>
+            </div>
+            <button id="pause-btn" style="margin-top:10px;padding:5px 10px;background:#E1306C;color:white;border:none;border-radius:5px;cursor:pointer">
+                ⏸️ Pausar
+            </button>
+            <button id="save-btn" style="margin-top:5px;padding:5px 10px;background:#405de6;color:white;border:none;border-radius:5px;cursor:pointer">
+                💾 Guardar Ahora
+            </button>
+        `;
+        
+        document.body.appendChild(container);
+        return container;
+    }
+
+    updateUI(count) {
+        const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const speed = elapsed > 0 ? Math.floor((count / elapsed) * 60) : 0;
+        
+        this.ui.querySelector('#count').textContent = count;
+        this.ui.querySelector('#time').textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        this.ui.querySelector('#speed').textContent = `${speed}/min`;
+    }
+
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    randomSleep() {
+        const ms = Math.floor(Math.random() * 
+            (this.config.MAX_WAIT_MS - this.config.MIN_WAIT_MS + 1)) + 
+            this.config.MIN_WAIT_MS;
+        return this.sleep(ms);
+    }
+
+    // Encontrar el contenedor scrollable de manera más robusta
+    findScrollableContainer() {
+        const selectors = [
+            'div[role="dialog"] div[style*="overflow"]',
+            'div[role="dialog"] > div > div',
+            'div[role="dialog"] ._aano',
+            'div[role="dialog"] div[class*="scroll"]'
+        ];
+
+        for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (element && this.isScrollable(element)) {
+                return element;
+            }
+        }
+
+        // Fallback: buscar por comportamiento de scroll
+        const dialog = document.querySelector('div[role="dialog"]');
+        if (dialog) {
+            const divs = dialog.querySelectorAll('div');
+            for (const div of divs) {
+                if (this.isScrollable(div)) {
+                    return div;
+                }
+            }
+        }
+
+        throw new Error("No se encontró el contenedor scrollable");
+    }
+
+    isScrollable(element) {
+        const style = window.getComputedStyle(element);
+        const hasScroll = style.overflowY === 'auto' || style.overflowY === 'scroll';
+        const hasHeight = element.scrollHeight > element.clientHeight;
+        return hasScroll && hasHeight;
+    }
+
+    // Scroll suave con aceleración/desaceleración
+    async smoothScroll(container) {
+        const start = container.scrollTop;
+        const end = container.scrollHeight;
+        const distance = end - start;
+        const duration = 800 + Math.random() * 400;
+        const startTime = Date.now();
+
+        return new Promise(resolve => {
+            const animate = () => {
+                const currentTime = Date.now();
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // Función de easing (suavizado)
+                const ease = 1 - Math.pow(1 - progress, 3);
+                container.scrollTop = start + (distance * ease);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    resolve();
+                }
+            };
+            animate();
+        });
+    }
+
+    // Extracción inteligente de datos
+    extractUsers(container) {
+        const users = new Set();
+        
+        // Selectores prioritarios para Instagram
+        const selectors = [
+            'a[href^="/"][tabindex="0"]',
+            'div[role="dialog"] a[href^="/"]:not([href*="/p/"])',
+            'a.x1i10hfl'
+        ];
+
+        for (const selector of selectors) {
+            const elements = container.querySelectorAll(selector);
+            if (elements.length > 0) {
+                elements.forEach(el => {
+                    const href = el.getAttribute('href');
+                    if (href && href !== '/' && !href.includes('/p/')) {
+                        const username = href.replace(/\//g, '').split('?')[0];
+                        if (username && username.length > 1) {
+                            // Extraer nombre real
+                            const nameElement = el.querySelector('span, div');
+                            const fullName = nameElement ? 
+                                nameElement.textContent.trim().split('\n')[0] : 
+                                "Sin Nombre";
+                            
+                            if (!this.data.has(username)) {
+                                users.add(`${username},${fullName}`);
+                            }
+                        }
+                    }
+                });
+                break; // Usar el primer selector que funcione
+            }
+        }
+
+        return Array.from(users);
+    }
+
+    // Guardar progreso automáticamente
+    autoSave() {
+        this.batchCounter++;
+        if (this.batchCounter % this.config.SAVE_EVERY_X_USERS === 0) {
+            this.saveBackup();
+        }
+    }
+
+    saveBackup() {
+        const data = Array.from(this.data.values());
+        const blob = new Blob([data.join('\n')], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        
+        // Solo guardamos en localStorage como backup
+        try {
+            localStorage.setItem('ig_scraper_backup', JSON.stringify({
+                timestamp: Date.now(),
+                count: data.length,
+                data: data.slice(-100) // Últimos 100 como respaldo
+            }));
+            console.log(`💾 Backup guardado (${data.length} usuarios)`);
+        } catch (e) {
+            console.warn("No se pudo guardar backup en localStorage");
+        }
+        
+        URL.revokeObjectURL(url);
+    }
+
+    // Descargar CSV final
+    downloadCSV() {
+        const data = Array.from(this.data.values());
+        if (data.length === 0) {
+            alert("No hay datos para descargar");
+            return;
+        }
+
+        const headers = "Usuario,Nombre,Timestamp\n";
+        const timestamp = new Date().toISOString();
+        const content = headers + data.map(user => 
+            `${user},${timestamp}`
+        ).join("\n");
+
+        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', `instagram_followers_${Date.now()}.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log(`✅ Descargado CSV con ${data.length} usuarios`);
+    }
+
+    // Ejecución principal
+    async start() {
+        if (this.isRunning) return;
+        
+        try {
+            this.isRunning = true;
+            this.startTime = Date.now();
+            this.ui.querySelector('#status').textContent = "🔄 Ejecutando...";
+            this.ui.querySelector('#status').style.color = "#00ff00";
+
+            const container = this.findScrollableContainer();
+            console.log("✅ Contenedor encontrado:", container);
+
+            let stagnantAttempts = 0;
+            let previousHeight = container.scrollHeight;
+            let previousCount = 0;
+
+            while (this.data.size < this.config.MAX_USERS && this.isRunning) {
+                // Scroll suave
+                await this.smoothScroll(container);
+                
+                // Espera humana variable
+                await this.randomSleep();
+                
+                // Extraer usuarios
+                const newUsers = this.extractUsers(container);
+                newUsers.forEach(user => {
+                    const [username] = user.split(',');
+                    this.data.set(username, user);
+                });
+
+                // Actualizar UI
+                this.updateUI(this.data.size);
+                
+                // Guardar progreso automático
+                if (this.data.size > previousCount) {
+                    this.autoSave();
+                    previousCount = this.data.size;
+                }
+
+                // Verificar fin de lista
+                if (container.scrollHeight === previousHeight) {
+                    stagnantAttempts++;
+                    console.log(`⚠️ Sin cambios (${stagnantAttempts}/${this.config.MAX_STAGNANT_ATTEMPTS})`);
+                    
+                    if (stagnantAttempts >= this.config.MAX_STAGNANT_ATTEMPTS) {
+                        this.ui.querySelector('#status').textContent = "🏁 Lista completa";
+                        break;
+                    }
+                } else {
+                    stagnantAttempts = 0;
+                    previousHeight = container.scrollHeight;
+                }
+
+                // Verificar límite
+                if (this.data.size >= this.config.MAX_USERS) {
+                    this.ui.querySelector('#status').textContent = "🎯 Límite alcanzado";
+                    break;
+                }
+            }
+
+            // Finalización
+            if (this.isRunning) {
+                this.ui.querySelector('#status').textContent = "✅ Proceso completado";
+                this.ui.querySelector('#status').style.color = "#00ff00";
+                this.downloadCSV();
+            }
+
+        } catch (error) {
+            console.error("❌ Error:", error);
+            this.ui.querySelector('#status').textContent = `❌ Error: ${error.message}`;
+            this.ui.querySelector('#status').style.color = "#ff0000";
+        } finally {
+            this.isRunning = false;
+        }
+    }
+
+    pause() {
+        this.isRunning = false;
+        this.ui.querySelector('#status').textContent = "⏸️ Pausado";
+        this.ui.querySelector('#status').style.color = "#ffff00";
+    }
+}
+
+// ================= INICIALIZACIÓN =================
+async function initializeScraper() {
+    // Verificar que estamos en Instagram
+    if (!window.location.hostname.includes('instagram.com')) {
+        alert("⚠️ Este script solo funciona en Instagram.com");
+        return;
+    }
+
+    // Verificar que la ventana de seguidores esté abierta
+    if (!document.querySelector('div[role="dialog"]')) {
+        alert("⚠️ Abre primero la ventana de seguidores/seguidos");
+        return;
+    }
+
+    // Crear instancia del scraper
+    const scraper = new InstagramScraper(CONFIG);
+
+    // Configurar botones
+    scraper.ui.querySelector('#pause-btn').onclick = () => {
+        if (scraper.isRunning) {
+            scraper.pause();
+            scraper.ui.querySelector('#pause-btn').textContent = "▶️ Continuar";
+        } else {
+            scraper.ui.querySelector('#pause-btn').textContent = "⏸️ Pausar";
+            scraper.start();
+        }
+    };
+
+    scraper.ui.querySelector('#save-btn').onclick = () => {
+        scraper.downloadCSV();
+    };
+
+    // Iniciar automáticamente después de 2 segundos
+    await scraper.sleep(2000);
+    scraper.start();
+
+    return scraper;
+}
+
+// ================= EJECUCIÓN =================
+// Ejecutar cuando se pegue en consola
+const scraper = initializeScraper().catch(console.error);
+🛡️ PLAN DE SEGURIDAD MEJORADO
+Fase 1: Preparación Inteligente
+javascript
+// ANTES de ejecutar:
+1. Usa Chrome con estas configuraciones:
+   - chrome://flags/#automatic-tab-discarding → Disabled
+   - chrome://flags/#proactive-tab-freeze-and-discard → Disabled
+
+2. Limpia caché de Instagram si hiciste muchos intentos previos
+
+3. Activa "Modo Desarrollador" en Instagram (opcional):
+   - Abre inspeccionar elemento
+   - Ve a Network → Throttling → "Fast 3G"
+   - Esto simula conexión más lenta y humana
+Fase 2: Patrón de Uso Seguro
+text
+LUNES a VIERNES:
+- Horario óptimo: 10:00 AM - 5:00 PM (horario laboral)
+- Máximo: 1 vez cada 24 horas
+- Si falla: Esperar 48 horas
+
+FINES DE SEMANA:
+- Horario óptimo: 2:00 PM - 8:00 PM
+- Máximo: 1 vez cada 48 horas
+Fase 3: Señales Humanas Adicionales
+Agrega este código ANTES de ejecutar el scraper principal:
+
+javascript
+// Simula actividad humana aleatoria
+function simulateHumanActivity() {
+    const activities = [
+        () => window.scrollBy(0, 50 + Math.random() * 100),
+        () => window.scrollBy(0, -30 - Math.random() * 50),
+        () => document.activeElement?.blur(),
+        () => {
+            const mouseMove = new MouseEvent('mousemove', {
+                view: window,
+                bubbles: true,
+                clientX: Math.random() * window.innerWidth,
+                clientY: Math.random() * window.innerHeight
+            });
+            document.dispatchEvent(mouseMove);
+        }
+    ];
+    
+    // Ejecutar actividad aleatoria cada 30-60 segundos
+    setInterval(() => {
+        if (Math.random() > 0.7) { // 30% de probabilidad
+            const activity = activities[Math.floor(Math.random() * activities.length)];
+            activity();
+        }
+    }, 30000 + Math.random() * 30000);
+}
+
+// Iniciar antes del scraper
+simulateHumanActivity();
+Fase 4: Monitor de Riesgos
+javascript
+// Añade esto al script principal para detectar advertencias
+const warningMonitor = {
+    warnings: [],
+    
+    checkForWarnings() {
+        // Buscar mensajes de advertencia de Instagram
+        const warnings = document.querySelectorAll([
+            'div:contains("Try Again Later")',
+            'div:contains("Too Many Requests")',
+            'div:contains("Action Blocked")',
+            'div[role="alert"]'
+        ].join(','));
+        
+        if (warnings.length > 0) {
+            this.warnings.push({
+                time: Date.now(),
+                message: warnings[0].textContent
+            });
+            
+            if (this.warnings.length >= 2) {
+                console.warn("⚠️ MÚLTIPLES ADVERTENCIAS - DETENIENDO POR SEGURIDAD");
+                scraper.pause();
+                alert("Instagram ha detectado actividad inusual. Espera 24 horas.");
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+// Verificar cada minuto
+setInterval(() => warningMonitor.checkForWarnings(), 60000);
+📊 ESTIMACIÓN DE TIEMPO MEJORADA
+Con el scroll suave y tiempos aleatorios:
+
+text
+2000 usuarios ÷ 12 por carga = 166 scrolls
+Tiempo por scroll: 3-7 segundos (promedio 5s)
+Tiempo total: 166 × 5s = 830s ≈ 14 minutos
++ 10% variabilidad humana = 15-16 minutos total
+🚨 PROTOCOLO DE EMERGENCIA
+Si aparece alguna de estas señales:
+
+"Try Again Later" → Detener inmediatamente, esperar 72h
+
+Lista deja de cargar → Pausar 5min, luego continuar
+
+Error de conexión → Cerrar pestaña, no reintentar hasta mañana
+
+Captcha aparece → Resolver manualmente, luego continuar
+
+
+Sin duda alguna, la opción que acabas de pasar (Opción B) es mucho mejor y más segura que el script básico que te di antes.
+
+¿Por qué? Porque mi script anterior era un "martillo" (funcional pero bruto), y este nuevo script es un "bisturí". Tiene características que reducen drásticamente la huella digital robótica.
+
+Aquí te explico por qué debes usar ese código y un pequeño error que corregí para que te funcione bien.
+
+Por qué tu nuevo código gana por goleada:
+Scroll Suave (smoothScroll):
+
+Mi script anterior: Saltaba de golpe (scrollTo). Eso es comportamiento 100% bot.
+
+Este script: Usa una función matemática de aceleración/desaceleración (easing). El movimiento se parece mucho más al dedo de un humano deslizando la pantalla. Esto es vital para engañar a los sistemas de biometría.
+
+Interfaz Visual (UI):
+
+Tener una cajita negra flotando con el contador (Recolectados: 540) te da paz mental. Con el otro tendrías que mirar la consola, lo cual es incómodo.
+
+Sistema de Backup (autoSave):
+
+Esto es clave. Si el navegador se cuelga en el seguidor 1.900, mi script anterior perdía todo. Este script va guardando en la memoria local (localStorage), así que estás protegido.
+
+Selectores Robustos:
+
+El script busca el contenedor de 4 formas distintas (findScrollableContainer). Si Instagram cambia el código mañana, este script tiene más probabilidades de seguir funcionando sin que tengas que editarlo.
+
+⚠️ IMPORTANTE: Corrección del Código
+He revisado el código que pasaste y tiene un error de sintaxis en la parte de warningMonitor. Usa :contains, que es algo de jQuery y no funciona en JavaScript puro moderno. El script fallaría justo cuando intente protegerte.
+
+Aquí tienes la versión corregida de esa función específica. Sustituye la parte de warningMonitor de tu código con esto:
+
+JavaScript
+// CORRECCIÓN: Monitor de Riesgos (Compatible con JS moderno)
+const warningMonitor = {
+    warnings: [],
+    
+    checkForWarnings() {
+        // Buscamos texto específico en toda la página usando XPath (más seguro que selectores CSS)
+        const warningTexts = [
+            "Try Again Later",
+            "Too Many Requests",
+            "Action Blocked",
+            "Intentar de nuevo más tarde", // Versión español
+            "Acción bloqueada"             // Versión español
+        ];
+
+        let foundWarning = false;
+        
+        // Buscar en el cuerpo del documento
+        const bodyText = document.body.innerText;
+        
+        warningTexts.forEach(text => {
+            if (bodyText.includes(text)) {
+                foundWarning = true;
+                this.warnings.push({
+                    time: Date.now(),
+                    message: text
+                });
+            }
+        });
+
+        // También buscamos roles de alerta específicos
+        const alertRoles = document.querySelectorAll('div[role="alert"]');
+        if (alertRoles.length > 0) {
+            foundWarning = true;
+        }
+        
+        if (foundWarning && this.warnings.length >= 2) {
+            console.warn("⚠️ MÚLTIPLES ADVERTENCIAS - DETENIENDO POR SEGURIDAD");
+            // Asumimos que la variable 'scraper' es global o accesible
+            if (typeof scraper !== 'undefined') scraper.pause();
+            alert("Instagram ha detectado actividad inusual. Espera 24 horas.");
+            return false;
+        }
+        return true;
+    }
+};
+
+// Verificar cada minuto
+setInterval(() => warningMonitor.checkForWarnings(), 60000);
