@@ -851,41 +851,92 @@
   }
 
   function buildExcelHtml(profile, comparison, scrapeTime) {
-    const maxLen = Math.max(
-      comparison.nos.length,
-      comparison.noLoSigo.length,
-      comparison.noMeSigue.length,
-      1
-    );
-    const rowHtml = [];
+    const nos = comparison.nos;
+    const noLoSigo = comparison.noLoSigo;
+    const noMeSigue = comparison.noMeSigue;
+    const maxLen = Math.max(nos.length, noLoSigo.length, noMeSigue.length, 1);
+    const title = "Seguidores vs Seguidos (" + profile + ")";
+    const esc = (s) =>
+      String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const bdr =
+      "<Borders>" +
+      '<Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>' +
+      '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>' +
+      '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>' +
+      '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>' +
+      "</Borders>";
+
+    const dataRows = [];
     for (let i = 0; i < maxLen; i += 1) {
-      rowHtml.push(
-        `<tr>` +
-          `<td>${comparison.nos[i] || ""}</td>` +
-          `<td>${comparison.noLoSigo[i] || ""}</td>` +
-          `<td>${comparison.noMeSigue[i] || ""}</td>` +
-          `<td></td>` +
-          `<td></td>` +
-          `<td>${scrapeTime}</td>` +
-          `</tr>`
-      );
+      const s = i % 2 === 1 ? "ds" : "d";
+      let r = "<Row>";
+      r += `<Cell ss:Index="2" ss:StyleID="${s}"><Data ss:Type="String">${esc(nos[i] || "")}</Data></Cell>`;
+      r += `<Cell ss:Index="4" ss:StyleID="${s}"><Data ss:Type="String">${esc(noLoSigo[i] || "")}</Data></Cell>`;
+      r += `<Cell ss:Index="6" ss:StyleID="${s}"><Data ss:Type="String">${esc(noMeSigue[i] || "")}</Data></Cell>`;
+      r += `<Cell ss:Index="8" ss:StyleID="${s}"><Data ss:Type="String"></Data></Cell>`;
+      r += `<Cell ss:Index="10" ss:StyleID="${s}"><Data ss:Type="String"></Data></Cell>`;
+      if (i === 0) {
+        r += `<Cell ss:Index="12" ss:StyleID="d"><Data ss:Type="String">${esc(scrapeTime)}</Data></Cell>`;
+      }
+      r += "</Row>";
+      dataRows.push(r);
     }
-    return (
-      `<!doctype html><html><head><meta charset="utf-8"></head><body>` +
-      `<h2>Seguidores vs Seguidos (${profile})</h2>` +
-      `<table border="1" cellspacing="0" cellpadding="4">` +
-      `<thead><tr>` +
-      `<th>Nos seguimos (${comparison.nos.length})</th>` +
-      `<th>No lo sigo (${comparison.noLoSigo.length})</th>` +
-      `<th>No me sigue (${comparison.noMeSigue.length})</th>` +
-      `<th>Nuevos Seguidores (0)</th>` +
-      `<th>Nuevos Siguiendo (0)</th>` +
-      `<th>Ultimo Scrapeo</th>` +
-      `</tr></thead>` +
-      `<tbody>${rowHtml.join("")}</tbody>` +
-      `</table>` +
-      `</body></html>`
-    );
+
+    return [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<?mso-application progid="Excel.Sheet"?>',
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
+      ' xmlns:o="urn:schemas-microsoft-com:office:office"',
+      ' xmlns:x="urn:schemas-microsoft-com:office:excel"',
+      ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
+      "<Styles>",
+      '<Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Bottom"/></Style>',
+      '<Style ss:ID="t"><Font ss:Size="24" ss:Bold="1" ss:Color="#2E75B6"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>',
+      `<Style ss:ID="h1"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#4F81BD" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      `<Style ss:ID="h2"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#E46C0A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      `<Style ss:ID="h3"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#C00000" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      `<Style ss:ID="h4"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#92D050" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      `<Style ss:ID="h5"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#00B0F0" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      `<Style ss:ID="h6"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#6A1B9A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      `<Style ss:ID="d">${bdr}</Style>`,
+      `<Style ss:ID="ds"><Interior ss:Color="#F2F2F2" ss:Pattern="Solid"/>${bdr}</Style>`,
+      "</Styles>",
+      '<Worksheet ss:Name="Seguimiento Instagram">',
+      `<Table ss:ExpandedColumnCount="12" ss:ExpandedRowCount="${6 + maxLen}">`,
+      '<Column ss:Index="1" ss:Width="37.5"/>',
+      '<Column ss:Index="2" ss:Width="225"/>',
+      '<Column ss:Index="3" ss:Width="75"/>',
+      '<Column ss:Index="4" ss:Width="225"/>',
+      '<Column ss:Index="5" ss:Width="75"/>',
+      '<Column ss:Index="6" ss:Width="225"/>',
+      '<Column ss:Index="7" ss:Width="75"/>',
+      '<Column ss:Index="8" ss:Width="225"/>',
+      '<Column ss:Index="9" ss:Width="75"/>',
+      '<Column ss:Index="10" ss:Width="225"/>',
+      '<Column ss:Index="11" ss:Width="75"/>',
+      '<Column ss:Index="12" ss:Width="180"/>',
+      `<Row ss:Height="25"><Cell ss:Index="2" ss:MergeAcross="10" ss:MergeDown="2" ss:StyleID="t"><Data ss:Type="String">${esc(title)}</Data></Cell></Row>`,
+      '<Row ss:Height="25"/>',
+      '<Row ss:Height="25"/>',
+      "<Row/>",
+      "<Row/>",
+      "<Row>",
+      `<Cell ss:Index="2" ss:StyleID="h1"><Data ss:Type="String">Nos seguimos (${nos.length})</Data></Cell>`,
+      `<Cell ss:Index="4" ss:StyleID="h2"><Data ss:Type="String">No lo sigo (${noLoSigo.length})</Data></Cell>`,
+      `<Cell ss:Index="6" ss:StyleID="h3"><Data ss:Type="String">No me sigue (${noMeSigue.length})</Data></Cell>`,
+      '<Cell ss:Index="8" ss:StyleID="h4"><Data ss:Type="String">Nuevos Seguidores (0)</Data></Cell>',
+      '<Cell ss:Index="10" ss:StyleID="h5"><Data ss:Type="String">Nuevos Siguiendo (0)</Data></Cell>',
+      '<Cell ss:Index="12" ss:StyleID="h6"><Data ss:Type="String">Ultimo Scrapeo</Data></Cell>',
+      "</Row>",
+      ...dataRows,
+      "</Table>",
+      '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">',
+      "<DoNotDisplayGridlines/>",
+      "</WorksheetOptions>",
+      "</Worksheet>",
+      "</Workbook>",
+    ].join("\n");
   }
 
   async function runAnalysis() {

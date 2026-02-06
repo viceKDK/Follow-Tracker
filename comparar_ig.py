@@ -365,7 +365,7 @@ def generar_excel(
             "",
             nuevos_siguiendo[i] if i < len(nuevos_siguiendo) else "",
             "",
-            ultimo_scrapeo,
+            ultimo_scrapeo if i == 0 else "",
         ]
         ws.append(row_data)
 
@@ -395,14 +395,15 @@ def generar_excel(
         ("Tab_NoMeSig", f"F6:F{max(7, max_len + 6)}", "TableStyleMedium7"),
         ("Tab_NuevosSeg", f"H6:H{max(7, max_len + 6)}", "TableStyleMedium9"),
         ("Tab_NuevosSig", f"J6:J{max(7, max_len + 6)}", "TableStyleMedium11"),
-        ("Tab_UltimoScrapeo", f"L6:L{max(7, max_len + 6)}", "TableStyleMedium4"),
+        ("Tab_UltimoScrapeo", "L6:L7", "TableStyleMedium4"),
     ]
     for name, ref, style in table_defs:
         tab = Table(displayName=name, ref=ref)
         tab.tableStyleInfo = TableStyleInfo(name=style, showRowStripes=True)
         ws.add_table(tab)
         col_letter = ref[0]
-        for row in range(6, max(7, max_len + 6) + 1):
+        end_row = int(ref.split(":")[1][1:])
+        for row in range(6, end_row + 1):
             ws[f"{col_letter}{row}"].border = thin_border
 
     wb.save(output_path)
