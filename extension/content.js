@@ -147,19 +147,24 @@
       #ft-auto-overlay .ft-btn:disabled { cursor: default; opacity: .55; transform: none; }
       #ft-auto-overlay .ft-log {
         margin-top: 10px;
-        padding: 10px;
+        padding: 8px 10px;
         border-radius: 10px;
         max-height: 180px;
         overflow: auto;
-        white-space: pre-wrap;
-        background: #0b1b24;
-        color: #d3edf7;
-        font-size: 11px;
-        line-height: 1.45;
-        font-family: Consolas, "Courier New", monospace;
+        background: #ffffff;
+        border: 1px solid #d6e3eb;
+        color: #1a2a33;
+        font-size: 11.5px;
+        line-height: 1.55;
+        font-family: "Segoe UI", Tahoma, sans-serif;
       }
+      #ft-auto-overlay .ft-log .ft-log-line {
+        padding: 2px 0;
+        border-bottom: 1px solid #f0f4f7;
+      }
+      #ft-auto-overlay .ft-log .ft-log-line:last-child { border-bottom: 0; }
       #ft-auto-overlay .ft-log::-webkit-scrollbar { width: 6px; }
-      #ft-auto-overlay .ft-log::-webkit-scrollbar-thumb { background: #2a4756; border-radius: 3px; }
+      #ft-auto-overlay .ft-log::-webkit-scrollbar-thumb { background: #c8d4dc; border-radius: 3px; }
       #ft-auto-overlay.ft-min .ft-body { display: none; }
     `;
     document.head.appendChild(style);
@@ -182,8 +187,8 @@
       </div>
       <div class="ft-body">
         <div class="ft-row"><span>Perfil</span><b id="ft-profile">-</b></div>
-        <div class="ft-row"><span>Fase</span><b id="ft-phase">-</b></div>
-        <div class="ft-row"><span>Usuarios</span><b id="ft-count">0</b></div>
+        <div class="ft-row"><span>Seguidores</span><b id="ft-followers">- / -</b></div>
+        <div class="ft-row"><span>Seguidos</span><b id="ft-following">- / -</b></div>
         <div id="ft-status" class="ft-status">Listo. Pulsa Iniciar.</div>
         <div class="ft-actions">
           <button id="ft-start" class="ft-btn ft-btn-primary">Iniciar analisis</button>
@@ -225,15 +230,41 @@
     }
   }
 
-  function setOverlay(profile, phase, count, status, color) {
+  const overlayCounts = { followers: { current: null, total: null }, following: { current: null, total: null } };
+
+  function renderCount(c) {
+    if (c.current == null && c.total == null) return "- / -";
+    const cur = c.current ?? 0;
+    if (c.total == null) return `${cur}`;
+    const pct = c.total > 0 ? ` (${Math.min(100, Math.round((cur / c.total) * 100))}%)` : "";
+    return `${cur} / ${c.total}${pct}`;
+  }
+
+  function updateCount(phaseKey, current, total) {
+    const c = overlayCounts[phaseKey];
+    if (!c) return;
+    if (current != null) c.current = current;
+    if (total != null) c.total = total;
+    const box = ensureOverlay();
+    const id = phaseKey === "followers" ? "#ft-followers" : "#ft-following";
+    const el = box.querySelector(id);
+    if (el) el.textContent = renderCount(c);
+  }
+
+  function resetOverlayCounts() {
+    overlayCounts.followers = { current: null, total: null };
+    overlayCounts.following = { current: null, total: null };
+    const box = ensureOverlay();
+    box.querySelector("#ft-followers").textContent = "- / -";
+    box.querySelector("#ft-following").textContent = "- / -";
+  }
+
+  function setOverlay(profile, _phase, _count, status, color) {
     const box = ensureOverlay();
     box.querySelector("#ft-profile").textContent = profile || "-";
-    box.querySelector("#ft-phase").textContent = phase || "-";
-    box.querySelector("#ft-count").textContent = String(count ?? 0);
     const st = box.querySelector("#ft-status");
     st.textContent = status || "";
     st.classList.remove("warn", "err");
-    // Heuristica: si el color de entrada es rojo/naranja, marca clase.
     if (color === "#ff9a9a" || color === "#ef4444" || color === "#f87171") {
       st.classList.add("err");
     } else if (color === "#ffd166" || color === "#f59e0b") {
@@ -244,10 +275,15 @@
   function appendOverlayLog(text) {
     const msg = String(text || "");
     overlayLogs.push(msg);
-    if (overlayLogs.length > 16) overlayLogs.shift();
+    if (overlayLogs.length > 18) overlayLogs.shift();
     const box = ensureOverlay();
     const log = box.querySelector("#ft-log");
-    log.textContent = overlayLogs.join("\n");
+    log.innerHTML = overlayLogs
+      .map((m) => {
+        const safe = m.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<div class="ft-log-line">${safe}</div>`;
+      })
+      .join("");
     log.scrollTop = log.scrollHeight;
   }
 
@@ -517,21 +553,14 @@
       page += 1;
       const nextMax = json && (json.next_max_id || json.next_min_id);
       const nextMaxStr = nextMax !== undefined && nextMax !== null && nextMax !== "" ? String(nextMax) : null;
-      // "pag" = lote de 100 usuarios entregado por IG. Para listas grandes
-      // necesitamos varias. cursor= es el next_max_id que IG nos da para
-      // pedir la siguiente pag.
-      const cursorPreview = nextMaxStr ? String(nextMaxStr).slice(0, 10) + "..." : "fin";
-      const totalPagsEstimadas = expectedCount
-        ? Math.max(1, Math.ceil(expectedCount / CONFIG.apiPageSize))
-        : "?";
-      if (page % 3 === 0 || added === 0 || (expectedCount && out.length >= expectedCount)) {
-        sendProgress(
-          `${phaseKey} API: ${out.length} usuarios (+${added})` +
-            (expectedCount ? ` de ${expectedCount}` : "") +
-            ` | pag ${page}/${totalPagsEstimadas} cursor=${cursorPreview}`
-        );
+      // Mensaje user-friendly: solo "Seguidores: 200/940 (21%)" sin cursor ni paginas.
+      const label = phaseKey === "followers" ? "Seguidores" : "Seguidos";
+      updateCount(phaseKey, out.length, expectedCount || null);
+      if (page === 1 || page % 3 === 0 || added === 0 || (expectedCount && out.length >= expectedCount)) {
+        sendProgress(`${label}: ${pctText(out.length, expectedCount)}`);
       }
-      setOverlay(getProfileFromPath(), `${phaseKey} api`, out.length, `pag ${page} (+${added})`, "#a2f3a6");
+      const phaseLabel = phaseKey === "followers" ? "Cargando seguidores" : "Cargando seguidos";
+      setOverlay(getProfileFromPath(), null, null, `${phaseLabel}...`, "#a2f3a6");
       sendBadge(out.length > 999 ? `${Math.floor(out.length / 1000)}k` : String(out.length));
 
       if (added === 0 && (!users || users.length === 0)) {
@@ -576,17 +605,18 @@
   }
 
   async function runApiMode(profile) {
-    sendProgress("Intentando modo API...");
+    sendProgress("Conectando con Instagram...");
     let session;
     try {
       session = ensureLoggedIn();
     } catch (_e) {
-      // No bloqueamos: cookies HttpOnly (sessionid) no son visibles desde JS.
       session = { csrf: getCookie("csrftoken") || "", dsUserId: getCookie("ds_user_id") || "" };
     }
     const info = await getProfileInfoApi(profile);
+    if (Number.isFinite(info.followersCount)) updateCount("followers", 0, info.followersCount);
+    if (Number.isFinite(info.followingCount)) updateCount("following", 0, info.followingCount);
     sendProgress(
-      `API profile ok: user_id=${info.id}, followers=${info.followersCount || "?"}, following=${info.followingCount || "?"}`
+      `Perfil @${profile}: ${info.followersCount || "?"} seguidores, ${info.followingCount || "?"} seguidos.`
     );
 
     const followersRowsRaw = await paginateFriendshipApi(
@@ -611,41 +641,37 @@
 
     const followersOk = isCompleteEnough(followersRows.length, info.followersCount);
     const followingOk = isCompleteEnough(followingRows.length, info.followingCount);
-    sendProgress(`Followers ${pctText(followersRows.length, info.followersCount)}`);
-    sendProgress(`Following ${pctText(followingRows.length, info.followingCount)}`);
+    updateCount("followers", followersRows.length, info.followersCount);
+    updateCount("following", followingRows.length, info.followingCount);
+    sendProgress(`Seguidores recolectados: ${pctText(followersRows.length, info.followersCount)}`);
+    sendProgress(`Seguidos recolectados: ${pctText(followingRows.length, info.followingCount)}`);
 
     // Loop de repechajes: insistimos hasta alcanzar el total real o agotar
     // CONFIG.apiNoProgressBail ciclos sin sumar nuevos.
     async function ensureFull(phaseKey, expected, currentRows) {
       if (!Number.isFinite(expected) || expected <= 0) return currentRows;
+      const label = phaseKey === "followers" ? "Seguidores" : "Seguidos";
       let rows = currentRows;
       let lastSize = rows.length;
       let noProgress = 0;
       for (let r = 1; r <= CONFIG.apiMaxRepechajes; r += 1) {
         if (rows.length >= expected) break;
-        sendProgress(`Repechaje ${phaseKey} #${r}/${CONFIG.apiMaxRepechajes} (${pctText(rows.length, expected)})...`);
+        sendProgress(`Reintentando ${label.toLowerCase()} (${pctText(rows.length, expected)})...`);
         await sleep(1200 + r * 400);
         checkAbort();
-        const retry = await paginateFriendshipApi(
-          info.id,
-          phaseKey,
-          expected,
-          session.dsUserId,
-          profile
-        );
+        const retry = await paginateFriendshipApi(info.id, phaseKey, expected, session.dsUserId, profile);
         rows = await mergeWithProfileCache(profile, phaseKey, retry);
+        updateCount(phaseKey, rows.length, expected);
         const delta = rows.length - lastSize;
-        sendProgress(`Repechaje ${phaseKey} #${r}: +${delta} -> ${pctText(rows.length, expected)}`);
+        sendProgress(`${label}: ${pctText(rows.length, expected)} (+${delta} nuevos)`);
         if (rows.length >= expected) {
-          sendProgress(`${phaseKey}: 100% completado en repechaje #${r}.`);
+          sendProgress(`${label}: completado al 100%.`);
           break;
         }
         if (delta <= 0) {
           noProgress += 1;
           if (noProgress >= CONFIG.apiNoProgressBail) {
-            sendProgress(
-              `${phaseKey}: ${noProgress} repechajes sin sumar usuarios nuevos. IG no entrega mas via API.`
-            );
+            sendProgress(`${label}: Instagram ya no entrega mas usuarios. Quedan ${expected - rows.length} sin recuperar.`);
             break;
           }
         } else {
@@ -656,31 +682,17 @@
       return rows;
     }
 
-    if (!followersOk && Number.isFinite(info.followersCount) && info.followersCount > 0) {
-      sendProgress(`Followers parcial (${pctText(followersRows.length, info.followersCount)}), iniciando ciclo de repechajes...`);
+    if (Number.isFinite(info.followersCount) && info.followersCount > 0 && followersRows.length < info.followersCount) {
       const next = await ensureFull("followers", info.followersCount, followersRows);
       followersRows.length = 0;
       Array.prototype.push.apply(followersRows, next);
     }
-    if (!followingOk && Number.isFinite(info.followingCount) && info.followingCount > 0) {
-      sendProgress(`Following parcial (${pctText(followingRows.length, info.followingCount)}), iniciando ciclo de repechajes...`);
+    if (Number.isFinite(info.followingCount) && info.followingCount > 0 && followingRows.length < info.followingCount) {
       const next = await ensureFull("following", info.followingCount, followingRows);
       followingRows.length = 0;
       Array.prototype.push.apply(followingRows, next);
     }
-    // Aunque hayan pasado el umbral 95%, si no estan al 100% probamos 1 repechaje extra.
-    if (followersRows.length < info.followersCount && Number.isFinite(info.followersCount)) {
-      sendProgress(`Followers en ${pctText(followersRows.length, info.followersCount)}, repechaje extra para 100%...`);
-      const next = await ensureFull("followers", info.followersCount, followersRows);
-      followersRows.length = 0;
-      Array.prototype.push.apply(followersRows, next);
-    }
-    if (followingRows.length < info.followingCount && Number.isFinite(info.followingCount)) {
-      sendProgress(`Following en ${pctText(followingRows.length, info.followingCount)}, repechaje extra para 100%...`);
-      const next = await ensureFull("following", info.followingCount, followingRows);
-      followingRows.length = 0;
-      Array.prototype.push.apply(followingRows, next);
-    }
+    void followersOk; void followingOk;
 
     // Solo abortamos si ambas estan absurdamente bajas (<50%) — ahi conviene el UI fallback.
     const half = (a, e) => Number.isFinite(e) && e > 0 && a < Math.floor(e * 0.5);
@@ -695,18 +707,18 @@
     const followersCsvName = `ig_auto_${safeProfile}_followers_${Date.now()}.csv`;
     const followersCsv = buildCsvFromRows(followersRows, ts);
     downloadText(followersCsvName, "﻿" + followersCsv, "text/csv;charset=utf-8;");
-    sendProgress(`CSV followers descargado: ${followersCsvName}`);
+    sendProgress(`Descargado: lista de seguidores (${followersRows.length}).`);
 
     const followingCsvName = `ig_auto_${safeProfile}_following_${Date.now()}.csv`;
     const followingCsv = buildCsvFromRows(followingRows, ts);
     downloadText(followingCsvName, "﻿" + followingCsv, "text/csv;charset=utf-8;");
-    sendProgress(`CSV following descargado: ${followingCsvName}`);
+    sendProgress(`Descargado: lista de seguidos (${followingRows.length}).`);
 
     const comparison = buildComparison(followersRows, followingRows);
     const reportHtml = buildExcelHtml(profile, comparison, ts);
     const reportName = `ig_auto_${safeProfile}_seguidores_vs_seguidos_${nowCompact()}.xls`;
     downloadText(reportName, reportHtml, "application/vnd.ms-excel;charset=utf-8;");
-    sendProgress(`Excel compatible descargado: ${reportName}`);
+    sendProgress(`Descargado: reporte Excel.`);
   }
 
   function toSafeFilePart(text) {
@@ -1484,31 +1496,31 @@
 
     try {
       const profile = activeProfile;
-      setOverlay(profile, "preparando", 0, "Iniciando analisis...", "#a2f3a6");
-      sendProgress(`Perfil detectado: ${profile}`);
-      sendProgress(`Glosario: "pag X" = lote API de ${CONFIG.apiPageSize} usuarios; cursor = next_max_id que entrega IG.`);
+      resetOverlayCounts();
+      setOverlay(profile, null, null, "Iniciando analisis...", "#a2f3a6");
+      sendProgress(`Analizando perfil @${profile}...`);
 
       try {
         ensureLoggedIn();
-        sendProgress("Cookies de sesion detectadas.");
       } catch (sessionErr) {
-        // No abortamos: muchas cookies (sessionid) son HttpOnly y no se ven desde JS.
-        // Si el modo API realmente no esta autorizado, el 401 lo mostrara.
-        sendProgress(`Aviso: ${sessionErr.message}`);
+        // sessionid es HttpOnly y no es visible desde JS, no abortamos.
+        // Si IG no autoriza, el 401 dara mensaje claro.
+        if (!/HttpOnly|invisible|sessionid/i.test(sessionErr.message)) {
+          sendProgress(`Aviso: ${sessionErr.message}`);
+        }
       }
 
       let usedApi = false;
       let lastApiError = null;
       for (let attempt = 1; attempt <= CONFIG.apiMaxAttempts; attempt += 1) {
         try {
-          sendProgress(`Intento API ${attempt}/${CONFIG.apiMaxAttempts}...`);
           await runApiMode(profile);
           usedApi = true;
           break;
         } catch (apiError) {
           lastApiError = apiError;
-          sendProgress(`Intento API ${attempt} fallo: ${apiError.message}`);
           if (attempt < CONFIG.apiMaxAttempts) {
+            sendProgress(`Reintento ${attempt}/${CONFIG.apiMaxAttempts - 1}...`);
             await sleep(CONFIG.apiRetryDelayMs);
           }
         }
@@ -1516,11 +1528,8 @@
 
       if (!usedApi) {
         sendProgress(
-          `Modo API fallo tras ${CONFIG.apiMaxAttempts} intentos: ${
-            (lastApiError && lastApiError.message) || "error desconocido"
-          }`
+          `No se pudo via API (${(lastApiError && lastApiError.message) || "error"}). Probando metodo alternativo...`
         );
-        sendProgress("Pasando a modo UI...");
       }
 
       if (!usedApi) {
