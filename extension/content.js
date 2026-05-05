@@ -14,8 +14,8 @@
     apiInterPageMs: 600,
     apiMaxBackoffMs: 30000,
     apiCompletenessRatio: 0.95,
-    apiMaxRepechajes: 6,
-    apiNoProgressBail: 3,
+    apiMaxRepechajes: 10,
+    apiNoProgressBail: 5,
   };
 
   const PHASES = [
@@ -237,7 +237,10 @@
     if (c.current == null && c.total == null) return "- / -";
     const cur = c.current ?? 0;
     if (c.total == null) return `${cur}`;
-    const pct = c.total > 0 ? ` (${Math.min(100, Math.round((cur / c.total) * 100))}%)` : "";
+    let pctNum = c.total > 0 ? Math.floor((cur / c.total) * 100) : 0;
+    if (cur >= c.total) pctNum = 100;
+    if (pctNum === 100 && cur < c.total) pctNum = 99;
+    const pct = c.total > 0 ? ` (${pctNum}%)` : "";
     return `${cur} / ${c.total}${pct}`;
   }
 
@@ -609,7 +612,11 @@
 
   function pctText(actual, expected) {
     if (!Number.isFinite(expected) || expected <= 0) return `${actual}`;
-    const pct = Math.round((actual / expected) * 100);
+    // Math.floor para evitar "100%" cuando en realidad es 99.58%.
+    // Solo mostramos 100% si actual >= expected.
+    let pct = Math.floor((actual / expected) * 100);
+    if (actual >= expected) pct = 100;
+    if (pct === 100 && actual < expected) pct = 99;
     return `${actual}/${expected} (${pct}%)`;
   }
 
@@ -679,14 +686,15 @@
     async function ensureFull(phaseKey, expected, currentRows) {
       if (!Number.isFinite(expected) || expected <= 0) return currentRows;
       const label = phaseKey === "followers" ? "Seguidores" : "Seguidos";
+      const MAX = CONFIG.apiMaxRepechajes;
       let rows = currentRows;
       let lastSize = rows.length;
       let noProgress = 0;
       let netFails = 0;
-      for (let r = 1; r <= CONFIG.apiMaxRepechajes; r += 1) {
+      for (let r = 1; r <= MAX; r += 1) {
         if (rows.length >= expected) break;
         if (aborted) break;
-        sendProgress(`Reintentando ${label.toLowerCase()} (${pctText(rows.length, expected)})...`);
+        sendProgress(`${label}: reintento ${r}/${MAX} (${pctText(rows.length, expected)})...`);
         await sleep(1500 + r * 600);
         try {
           checkAbort();
@@ -702,7 +710,10 @@
           if (delta <= 0) {
             noProgress += 1;
             if (noProgress >= CONFIG.apiNoProgressBail) {
-              sendProgress(`${label}: IG ya no entrega mas via API. Quedan ${expected - rows.length} sin recuperar.`);
+              sendProgress(
+                `${label}: IG no entrega mas usuarios despues de ${noProgress} reintentos. ` +
+                `Faltan ${expected - rows.length} (probablemente cuentas suspendidas o bloqueadas).`
+              );
               break;
             }
           } else {
@@ -712,10 +723,14 @@
         } catch (e) {
           if (e && e.name === "AbortedError") throw e;
           netFails += 1;
-          console.warn(`[FollowTracker] ${label} repechaje #${r} fallo:`, e);
-          sendProgress(`${label}: ${netFails < 3 ? "esperando para reintentar..." : `${pctText(rows.length, expected)} (no se pudo completar).`}`);
-          if (netFails >= 3) break;
-          await sleep(3000 + netFails * 1500);
+          console.warn(`[FollowTracker] ${label} reintento ${r}/${MAX} fallo:`, e);
+          if (netFails < 3) {
+            sendProgress(`${label}: reintento ${r}/${MAX} fallo, esperando...`);
+            await sleep(3000 + netFails * 1500);
+          } else {
+            sendProgress(`${label}: ${pctText(rows.length, expected)} (conexion inestable, parando reintentos).`);
+            break;
+          }
         }
       }
       return rows;
