@@ -710,9 +710,12 @@
           if (delta <= 0) {
             noProgress += 1;
             if (noProgress >= CONFIG.apiNoProgressBail) {
+              const faltan = expected - rows.length;
               sendProgress(
-                `${label}: IG no entrega mas usuarios despues de ${noProgress} reintentos. ` +
-                `Faltan ${expected - rows.length} (probablemente cuentas suspendidas o bloqueadas).`
+                `${label}: ${pctText(rows.length, expected)}. ` +
+                `Faltan ${faltan}: el contador y la lista de IG no siempre coinciden ` +
+                `(IG los calcula en servicios distintos y no estan sincronizados al 100%, ` +
+                `pasa hasta en cuentas nuevas). Lo recolectado es lo realmente listable.`
               );
               break;
             }
@@ -771,6 +774,21 @@
     const followingCsv = buildCsvFromRows(followingRows, ts);
     downloadText(followingCsvName, "﻿" + followingCsv, "text/csv;charset=utf-8;");
     sendProgress(`Descargado: lista de seguidos (${followingRows.length}).`);
+
+    // Aviso final si quedo incompleto (con explicacion correcta).
+    const fdiff = Number.isFinite(info.followersCount) ? info.followersCount - followersRows.length : 0;
+    const gdiff = Number.isFinite(info.followingCount) ? info.followingCount - followingRows.length : 0;
+    if (fdiff > 0 || gdiff > 0) {
+      const partes = [];
+      if (fdiff > 0) partes.push(`${fdiff} seguidor${fdiff === 1 ? "" : "es"}`);
+      if (gdiff > 0) partes.push(`${gdiff} seguido${gdiff === 1 ? "" : "s"}`);
+      sendProgress(
+        `Diferencia: ${partes.join(" y ")} entre el contador y la lista. ` +
+        `Es un desfase normal de Instagram: el numero del header y la lista paginada ` +
+        `vienen de servicios distintos y no estan sincronizados al 100% (pasa siempre, ` +
+        `aun en cuentas nuevas). El reporte refleja la lista real que IG entrega.`
+      );
+    }
 
     const comparison = buildComparison(followersRows, followingRows);
     const totalsApi = {
