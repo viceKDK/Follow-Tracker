@@ -1606,25 +1606,34 @@
     return true;
   });
 
-  // Auto-show del overlay cuando estamos en una pagina de perfil.
-  function maybeShowOverlay() {
-    if (!onProfilePage()) return;
+  // El overlay NO se muestra solo. Aparece unicamente cuando el usuario
+  // hace click en el icono de la extension (popup -> ENSURE_OVERLAY -> SHOW_OVERLAY)
+  // o cuando se llama START_ANALYSIS.
+  function showOverlayIfProfile() {
+    if (!onProfilePage()) return false;
     const profile = getProfileFromPath();
     setOverlay(profile, "-", 0, "Listo. Pulsa Iniciar.", "#a2f3a6");
+    return true;
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", maybeShowOverlay, { once: true });
-  } else {
-    setTimeout(maybeShowOverlay, 800);
-  }
-
-  // Detectar SPA navegacion de IG (push/popstate) y refrescar el overlay.
+  // Si el usuario navega a otro perfil mientras el overlay esta abierto,
+  // refrescamos el nombre de perfil sin crear uno nuevo.
   let lastPath = location.pathname;
   setInterval(() => {
-    if (location.pathname !== lastPath) {
-      lastPath = location.pathname;
-      if (onProfilePage()) maybeShowOverlay();
+    if (location.pathname === lastPath) return;
+    lastPath = location.pathname;
+    if (overlay && document.body.contains(overlay) && onProfilePage() && !running) {
+      const profile = getProfileFromPath();
+      const profEl = overlay.querySelector("#ft-profile");
+      if (profEl) profEl.textContent = profile;
     }
   }, 1500);
+
+  // Hook adicional: SHOW_OVERLAY desde el popup.
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (!msg || msg.type !== "SHOW_OVERLAY") return undefined;
+    const ok = showOverlayIfProfile();
+    sendResponse({ ok, error: ok ? null : "No estas en un perfil." });
+    return true;
+  });
 })();

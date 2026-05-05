@@ -46,7 +46,10 @@ function send(type, tabId) {
     setTimeout(() => window.close(), 1800);
     return;
   }
-  // Inyecta content.js si hace falta y ya esta. El overlay aparece solo.
-  await send("ENSURE_OVERLAY", tab.id);
-  setTimeout(() => window.close(), 250);
+  // Inyecta content.js si hace falta y luego pide mostrar el overlay.
+  const ensure = await send("ENSURE_OVERLAY", tab.id);
+  if (ensure && ensure.ok) {
+    await send("SHOW_OVERLAY_TAB", tab.id);
+  }
+  setTimeout(() => window.close(), 200);
 })();
