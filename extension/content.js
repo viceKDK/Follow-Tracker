@@ -26,6 +26,7 @@
   let running = false;
   let aborted = false;
   let activeProfile = null;
+  let lastKnownTotals = { followers: null, following: null };
   let overlay = null;
   const overlayLogs = [];
 
@@ -620,26 +621,36 @@
       session = { csrf: getCookie("csrftoken") || "", dsUserId: getCookie("ds_user_id") || "" };
     }
     const info = await getProfileInfoApi(profile);
-    if (Number.isFinite(info.followersCount)) updateCount("followers", 0, info.followersCount);
-    if (Number.isFinite(info.followingCount)) updateCount("following", 0, info.followingCount);
+    if (Number.isFinite(info.followersCount)) {
+      updateCount("followers", 0, info.followersCount);
+      lastKnownTotals.followers = info.followersCount;
+    }
+    if (Number.isFinite(info.followingCount)) {
+      updateCount("following", 0, info.followingCount);
+      lastKnownTotals.following = info.followingCount;
+    }
     sendProgress(
       `Perfil @${profile}: ${info.followersCount || "?"} seguidores, ${info.followingCount || "?"} seguidos.`
     );
 
-    const followersRowsRaw = await paginateFriendshipApi(
-      info.id,
-      "followers",
-      info.followersCount,
-      session.dsUserId,
-      profile
-    );
-    const followingRowsRaw = await paginateFriendshipApi(
-      info.id,
-      "following",
-      info.followingCount,
-      session.dsUserId,
-      profile
-    );
+    let followersRowsRaw = [];
+    let followingRowsRaw = [];
+    try {
+      followersRowsRaw = await paginateFriendshipApi(
+        info.id, "followers", info.followersCount, session.dsUserId, profile
+      );
+    } catch (e) {
+      if (e && e.name === "AbortedError") throw e;
+      sendProgress(`Seguidores: pase inicial corto (${e.message || "error"}). Continuamos con repechajes.`);
+    }
+    try {
+      followingRowsRaw = await paginateFriendshipApi(
+        info.id, "following", info.followingCount, session.dsUserId, profile
+      );
+    } catch (e) {
+      if (e && e.name === "AbortedError") throw e;
+      sendProgress(`Seguidos: pase inicial corto (${e.message || "error"}). Continuamos con repechajes.`);
+    }
     const followersRows = await mergeWithProfileCache(profile, "followers", followersRowsRaw);
     const followingRows = await mergeWithProfileCache(profile, "following", followingRowsRaw);
     if (followersRows.length === 0 && followingRows.length === 0) {
@@ -661,30 +672,40 @@
       let rows = currentRows;
       let lastSize = rows.length;
       let noProgress = 0;
+      let netFails = 0;
       for (let r = 1; r <= CONFIG.apiMaxRepechajes; r += 1) {
         if (rows.length >= expected) break;
+        if (aborted) break;
         sendProgress(`Reintentando ${label.toLowerCase()} (${pctText(rows.length, expected)})...`);
-        await sleep(1200 + r * 400);
-        checkAbort();
-        const retry = await paginateFriendshipApi(info.id, phaseKey, expected, session.dsUserId, profile);
-        rows = await mergeWithProfileCache(profile, phaseKey, retry);
-        updateCount(phaseKey, rows.length, expected);
-        const delta = rows.length - lastSize;
-        sendProgress(`${label}: ${pctText(rows.length, expected)} (+${delta} nuevos)`);
-        if (rows.length >= expected) {
-          sendProgress(`${label}: completado al 100%.`);
-          break;
-        }
-        if (delta <= 0) {
-          noProgress += 1;
-          if (noProgress >= CONFIG.apiNoProgressBail) {
-            sendProgress(`${label}: Instagram ya no entrega mas usuarios. Quedan ${expected - rows.length} sin recuperar.`);
+        await sleep(1500 + r * 600);
+        try {
+          checkAbort();
+          const retry = await paginateFriendshipApi(info.id, phaseKey, expected, session.dsUserId, profile);
+          rows = await mergeWithProfileCache(profile, phaseKey, retry);
+          updateCount(phaseKey, rows.length, expected);
+          const delta = rows.length - lastSize;
+          sendProgress(`${label}: ${pctText(rows.length, expected)} (+${delta} nuevos)`);
+          if (rows.length >= expected) {
+            sendProgress(`${label}: completado al 100%.`);
             break;
           }
-        } else {
-          noProgress = 0;
+          if (delta <= 0) {
+            noProgress += 1;
+            if (noProgress >= CONFIG.apiNoProgressBail) {
+              sendProgress(`${label}: IG ya no entrega mas via API. Quedan ${expected - rows.length} sin recuperar.`);
+              break;
+            }
+          } else {
+            noProgress = 0;
+          }
+          lastSize = rows.length;
+        } catch (e) {
+          if (e && e.name === "AbortedError") throw e;
+          netFails += 1;
+          sendProgress(`${label}: reintento fallo (${e.message || "error"}). ${netFails < 3 ? "Probando de nuevo..." : "Aceptando lo recolectado."}`);
+          if (netFails >= 3) break;
+          await sleep(3000 + netFails * 1500);
         }
-        lastSize = rows.length;
       }
       return rows;
     }
@@ -701,11 +722,15 @@
     }
     void followersOk; void followingOk;
 
-    // Solo abortamos si ambas estan absurdamente bajas (<50%) — ahi conviene el UI fallback.
-    const half = (a, e) => Number.isFinite(e) && e > 0 && a < Math.floor(e * 0.5);
-    if (half(followersRows.length, info.followersCount) && half(followingRows.length, info.followingCount)) {
+    // Solo abortamos si AMBAS estan vacias o muy pobres. Si tenemos al menos 30%
+    // en alguna, preferimos quedarnos en API (UI seria mas lento y peor).
+    const tooLow = (a, e) => Number.isFinite(e) && e > 0 && a < Math.max(5, Math.floor(e * 0.3));
+    if (
+      followersRows.length === 0 && followingRows.length === 0 ||
+      (tooLow(followersRows.length, info.followersCount) && tooLow(followingRows.length, info.followingCount))
+    ) {
       throw new Error(
-        `API muy incompleto en ambas listas (${followersRows.length}/${info.followersCount} y ${followingRows.length}/${info.followingCount}). Cayendo a UI.`
+        `API entrego muy poco (${followersRows.length}/${info.followersCount || "?"} y ${followingRows.length}/${info.followingCount || "?"}). Cayendo a UI.`
       );
     }
 
@@ -922,6 +947,32 @@
     return path.includes(`/${phaseKey}/`);
   }
 
+  function readExpectedFromModal(phaseKey) {
+    // El header del modal abierto suele decir "X seguidores" / "X followers" / "X seguidos".
+    const dialog = document.querySelector('div[role="dialog"]') || getRouteScope(phaseKey);
+    if (!dialog) return null;
+    const labels = phaseKey === "followers"
+      ? ["seguidor", "seguidores", "follower", "followers"]
+      : ["seguido", "seguidos", "following"];
+    const candidates = dialog.querySelectorAll("h1, h2, h3, span, div");
+    for (const el of candidates) {
+      if (!(el instanceof HTMLElement)) continue;
+      const txt = (el.textContent || "").toLowerCase().trim();
+      if (txt.length > 60) continue;
+      if (!labels.some((l) => txt.includes(l))) continue;
+      const n = parseCountFromText(txt);
+      if (n) return n;
+    }
+    // Tambien probamos atributos title="N" cerca.
+    const titled = dialog.querySelectorAll("[title]");
+    for (const el of titled) {
+      const v = el.getAttribute("title") || "";
+      const n = parseCountFromText(v);
+      if (n) return n;
+    }
+    return null;
+  }
+
   function getRouteScope(phaseKey) {
     // En el caso "modal como ruta" (no hay role=dialog), el listado se renderiza
     // dentro de un contenedor del main. Devolvemos el mejor scope disponible.
@@ -935,7 +986,7 @@
 
   async function openDialogForPhase(phase) {
     const trigger = findPhaseTrigger(phase);
-    const expectedCount = getExpectedCountFromTrigger(trigger);
+    let expectedCount = getExpectedCountFromTrigger(trigger);
 
     // Camino preferido: click en el trigger y esperar role=dialog.
     if (trigger) {
@@ -953,6 +1004,11 @@
             ),
             5000
           );
+        }
+        // Enriquecemos el expectedCount con el header del modal si el trigger no lo tenia.
+        if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
+          const fromModal = readExpectedFromModal(phase.key);
+          if (fromModal) expectedCount = fromModal;
         }
         return { expectedCount, mode: "dialog" };
       }
@@ -975,6 +1031,10 @@
       return isModalRouteOpen(phase.key) && anchors > 5;
     }, 12000);
     if (!okRoute) throw new Error(`No se abrio el listado de ${phase.key} (ni dialog ni ruta).`);
+    if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
+      const fromModal = readExpectedFromModal(phase.key);
+      if (fromModal) expectedCount = fromModal;
+    }
     return {
       expectedCount,
       mode: document.querySelector('div[role="dialog"]') ? "dialog" : "route",
@@ -1239,7 +1299,15 @@
       document.querySelector('div[role="dialog"]') || getRouteScope(phase.key) || container;
     let prevVisible = collectVisibleUsernames(initialScope);
 
-    // Set total inicial en el overlay para esta fase del UI.
+    // Set total inicial. Respaldos en orden: trigger -> modal -> lastKnownTotals (de runApiMode).
+    if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
+      const fromModal = readExpectedFromModal(phase.key);
+      if (fromModal) expectedCount = fromModal;
+    }
+    if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
+      const fallback = lastKnownTotals[phase.key];
+      if (Number.isFinite(fallback) && fallback > 0) expectedCount = fallback;
+    }
     if (Number.isFinite(expectedCount) && expectedCount > 0) {
       updateCount(phase.key, 0, expectedCount);
     } else {
@@ -1514,6 +1582,7 @@
     running = true;
     aborted = false;
     activeProfile = getProfileFromPath();
+    lastKnownTotals = { followers: null, following: null };
     sendBadge("RUN", "#1fa37d");
     setOverlayButtonsBusy(true);
 
