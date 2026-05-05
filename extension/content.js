@@ -344,6 +344,13 @@
     return new Date().toISOString();
   }
 
+  function formatScrapeDate(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    if (isNaN(d.getTime())) return String(iso || "");
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
   function nowCompact() {
     const d = new Date();
     const p = (n) => String(n).padStart(2, "0");
@@ -715,7 +722,11 @@
     sendProgress(`Descargado: lista de seguidos (${followingRows.length}).`);
 
     const comparison = buildComparison(followersRows, followingRows);
-    const reportHtml = buildExcelHtml(profile, comparison, ts);
+    const totalsApi = {
+      followers: Number.isFinite(info.followersCount) ? info.followersCount : followersRows.length,
+      following: Number.isFinite(info.followingCount) ? info.followingCount : followingRows.length,
+    };
+    const reportHtml = buildExcelHtml(profile, comparison, ts, totalsApi);
     const reportName = `ig_auto_${safeProfile}_seguidores_vs_seguidos_${nowCompact()}.xls`;
     downloadText(reportName, reportHtml, "application/vnd.ms-excel;charset=utf-8;");
     sendProgress(`Descargado: reporte Excel.`);
@@ -1396,12 +1407,20 @@
     return { nos, noLoSigo, noMeSigue };
   }
 
-  function buildExcelHtml(profile, comparison, scrapeTime) {
+  function buildExcelHtml(profile, comparison, scrapeTime, totals) {
     const nos = comparison.nos;
     const noLoSigo = comparison.noLoSigo;
     const noMeSigue = comparison.noMeSigue;
     const maxLen = Math.max(nos.length, noLoSigo.length, noMeSigue.length, 1);
     const title = "Seguidores vs Seguidos (" + profile + ")";
+    const totalFollowers = totals && Number.isFinite(totals.followers) ? totals.followers : null;
+    const totalFollowing = totals && Number.isFinite(totals.following) ? totals.following : null;
+    const scrapeDateFmt = formatScrapeDate(scrapeTime);
+    const subtitleParts = [];
+    if (totalFollowers != null) subtitleParts.push(`Total seguidores: ${totalFollowers}`);
+    if (totalFollowing != null) subtitleParts.push(`Total seguidos: ${totalFollowing}`);
+    if (scrapeDateFmt) subtitleParts.push(`Scrapeo: ${scrapeDateFmt}`);
+    const subtitle = subtitleParts.join("   |   ");
     const esc = (s) =>
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -1423,7 +1442,7 @@
       r += `<Cell ss:Index="8" ss:StyleID="${s}"><Data ss:Type="String"></Data></Cell>`;
       r += `<Cell ss:Index="10" ss:StyleID="${s}"><Data ss:Type="String"></Data></Cell>`;
       if (i === 0) {
-        r += `<Cell ss:Index="12" ss:StyleID="d"><Data ss:Type="String">${esc(scrapeTime)}</Data></Cell>`;
+        r += `<Cell ss:Index="12" ss:StyleID="d"><Data ss:Type="String">${esc(scrapeDateFmt)}</Data></Cell>`;
       }
       r += "</Row>";
       dataRows.push(r);
@@ -1445,11 +1464,12 @@
       `<Style ss:ID="h4"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#92D050" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
       `<Style ss:ID="h5"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#00B0F0" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
       `<Style ss:ID="h6"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#6A1B9A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      '<Style ss:ID="sub"><Font ss:Size="12" ss:Bold="1" ss:Color="#3A4B57"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>',
       `<Style ss:ID="d">${bdr}</Style>`,
       `<Style ss:ID="ds"><Interior ss:Color="#F2F2F2" ss:Pattern="Solid"/>${bdr}</Style>`,
       "</Styles>",
       '<Worksheet ss:Name="Seguimiento Instagram">',
-      `<Table ss:ExpandedColumnCount="12" ss:ExpandedRowCount="${6 + maxLen}">`,
+      `<Table ss:ExpandedColumnCount="12" ss:ExpandedRowCount="${7 + maxLen}">`,
       '<Column ss:Index="1" ss:Width="37.5"/>',
       '<Column ss:Index="2" ss:Width="225"/>',
       '<Column ss:Index="3" ss:Width="75"/>',
@@ -1465,6 +1485,7 @@
       `<Row ss:Height="25"><Cell ss:Index="2" ss:MergeAcross="10" ss:MergeDown="2" ss:StyleID="t"><Data ss:Type="String">${esc(title)}</Data></Cell></Row>`,
       '<Row ss:Height="25"/>',
       '<Row ss:Height="25"/>',
+      `<Row ss:Height="20"><Cell ss:Index="2" ss:MergeAcross="10" ss:StyleID="sub"><Data ss:Type="String">${esc(subtitle)}</Data></Cell></Row>`,
       "<Row/>",
       "<Row/>",
       "<Row>",
@@ -1536,17 +1557,16 @@
 
       if (!usedApi) {
         const phaseResults = {};
+        const phaseExpected = { followers: null, following: null };
         for (const phase of PHASES) {
           const phLbl = phase.key === "followers" ? "seguidores" : "seguidos";
           setOverlay(profile, null, null, `Abriendo lista de ${phLbl}...`, "#a2f3a6");
           sendProgress(`Abriendo lista de ${phLbl}...`);
           const phaseMeta = await openDialogForPhase(phase);
+          const exp = phaseMeta && Number.isFinite(phaseMeta.expectedCount) ? phaseMeta.expectedCount : null;
+          phaseExpected[phase.key] = exp;
           await sleep(650);
-          phaseResults[phase.key] = await scrapeCurrentDialog(
-            phase,
-            profile,
-            phaseMeta && Number.isFinite(phaseMeta.expectedCount) ? phaseMeta.expectedCount : null
-          );
+          phaseResults[phase.key] = await scrapeCurrentDialog(phase, profile, exp);
           sendProgress(`Descargado: lista de ${phLbl} (${phaseResults[phase.key].rows.length}).`);
           await closeDialog();
           await sleep(CONFIG.phaseDelayMs);
@@ -1557,10 +1577,14 @@
         const mergedFollowingRows = await mergeWithProfileCache(profile, "following", phaseResults.following.rows);
         const mergedComparison = buildComparison(mergedFollowersRows, mergedFollowingRows);
         const scrapeTime = phaseResults.following.scrapeTimestamp || nowIso();
-        const reportHtml = buildExcelHtml(profile, mergedComparison, scrapeTime);
+        const totalsUi = {
+          followers: phaseExpected.followers != null ? phaseExpected.followers : mergedFollowersRows.length,
+          following: phaseExpected.following != null ? phaseExpected.following : mergedFollowingRows.length,
+        };
+        const reportHtml = buildExcelHtml(profile, mergedComparison, scrapeTime, totalsUi);
         const reportName = `ig_auto_${toSafeFilePart(profile)}_seguidores_vs_seguidos_${nowCompact()}.xls`;
         downloadText(reportName, reportHtml, "application/vnd.ms-excel;charset=utf-8;");
-        sendProgress(`Excel compatible descargado: ${reportName}`);
+        sendProgress(`Descargado: reporte Excel.`);
         setOverlay(
           profile,
           "completo",
