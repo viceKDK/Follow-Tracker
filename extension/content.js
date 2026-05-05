@@ -459,7 +459,8 @@
       } catch (netErr) {
         lastErr = netErr;
         const wait = Math.min(CONFIG.apiMaxBackoffMs, 800 * Math.pow(2, attempt - 1));
-        sendProgress(`Red caida (${netErr.message || "error"}), reintento ${attempt}/${maxAttempts} en ${wait}ms`);
+        console.warn(`[FollowTracker] red caida en ${url}:`, netErr);
+        if (attempt === 1) sendProgress("Conexion inestable, reintentando...");
         await sleep(wait);
         continue;
       }
@@ -467,11 +468,13 @@
         try {
           return await res.json();
         } catch (parseErr) {
-          throw new Error(`API ${url}: respuesta no JSON (${parseErr.message || "parse error"}).`);
+          console.warn(`[FollowTracker] respuesta no-JSON en ${url}:`, parseErr);
+          throw new Error("Instagram devolvio una respuesta inesperada.");
         }
       }
       if (res.status === 401 || res.status === 403) {
-        throw new Error(`API ${res.status}: sesion no autorizada para ${url}. Reabre instagram.com logueado.`);
+        console.warn(`[FollowTracker] HTTP ${res.status} en ${url}`);
+        throw new Error("Instagram pidio reautenticacion. Recarga la pagina e intenta de nuevo.");
       }
       if (res.status === 429 || res.status === 503 || res.status === 502 || res.status === 504) {
         const retryAfterHeader = Number(res.headers.get("retry-after")) * 1000;
@@ -480,13 +483,18 @@
           : Math.min(CONFIG.apiMaxBackoffMs, 1500 * Math.pow(2, attempt - 1));
         const jitter = Math.floor(Math.random() * 600);
         const wait = base + jitter;
-        sendProgress(`API ${res.status} (rate limit), espera ${wait}ms, reintento ${attempt}/${maxAttempts}`);
+        console.warn(`[FollowTracker] HTTP ${res.status} en ${url}, espera ${wait}ms`);
+        if (attempt === 1) {
+          sendProgress(`Instagram pidio una pausa, esperando ${Math.round(wait / 1000)}s...`);
+        }
         await sleep(wait);
         continue;
       }
-      throw new Error(`API ${res.status} en ${url}`);
+      console.warn(`[FollowTracker] HTTP ${res.status} en ${url}`);
+      throw new Error("Instagram rechazo la consulta.");
     }
-    throw lastErr || new Error(`API agotada tras ${maxAttempts} reintentos: ${url}`);
+    if (lastErr) console.warn("[FollowTracker] red caida:", lastErr);
+    throw new Error("No se pudo conectar con Instagram tras varios reintentos.");
   }
 
   async function getProfileInfoApi(username) {
@@ -641,7 +649,8 @@
       );
     } catch (e) {
       if (e && e.name === "AbortedError") throw e;
-      sendProgress(`Seguidores: pase inicial corto (${e.message || "error"}). Continuamos con repechajes.`);
+      console.warn("[FollowTracker] followers pase inicial fallo:", e);
+      sendProgress(`Seguidores: reintentando...`);
     }
     try {
       followingRowsRaw = await paginateFriendshipApi(
@@ -649,7 +658,8 @@
       );
     } catch (e) {
       if (e && e.name === "AbortedError") throw e;
-      sendProgress(`Seguidos: pase inicial corto (${e.message || "error"}). Continuamos con repechajes.`);
+      console.warn("[FollowTracker] following pase inicial fallo:", e);
+      sendProgress(`Seguidos: reintentando...`);
     }
     const followersRows = await mergeWithProfileCache(profile, "followers", followersRowsRaw);
     const followingRows = await mergeWithProfileCache(profile, "following", followingRowsRaw);
@@ -702,7 +712,8 @@
         } catch (e) {
           if (e && e.name === "AbortedError") throw e;
           netFails += 1;
-          sendProgress(`${label}: reintento fallo (${e.message || "error"}). ${netFails < 3 ? "Probando de nuevo..." : "Aceptando lo recolectado."}`);
+          console.warn(`[FollowTracker] ${label} repechaje #${r} fallo:`, e);
+          sendProgress(`${label}: ${netFails < 3 ? "esperando para reintentar..." : `${pctText(rows.length, expected)} (no se pudo completar).`}`);
           if (netFails >= 3) break;
           await sleep(3000 + netFails * 1500);
         }
@@ -1611,17 +1622,17 @@
           break;
         } catch (apiError) {
           lastApiError = apiError;
+          console.warn(`[FollowTracker] intento API ${attempt} fallo:`, apiError);
           if (attempt < CONFIG.apiMaxAttempts) {
-            sendProgress(`Reintento ${attempt}/${CONFIG.apiMaxAttempts - 1}...`);
+            sendProgress("Reintentando conexion...");
             await sleep(CONFIG.apiRetryDelayMs);
           }
         }
       }
 
       if (!usedApi) {
-        sendProgress(
-          `No se pudo via API (${(lastApiError && lastApiError.message) || "error"}). Probando metodo alternativo...`
-        );
+        if (lastApiError) console.warn("[FollowTracker] API mode fallo:", lastApiError);
+        sendProgress("Cambiando a metodo alternativo...");
       }
 
       if (!usedApi) {
