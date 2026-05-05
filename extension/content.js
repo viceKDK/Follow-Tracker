@@ -185,15 +185,20 @@
   }
 
   function ensureLoggedIn() {
+    // sessionid suele ser HttpOnly (no visible via document.cookie). NO la exigimos.
+    // Solo validamos lo que el content script puede leer: csrftoken y ds_user_id.
     const csrf = getCookie("csrftoken");
     const ds = getCookie("ds_user_id");
-    const sid = getCookie("sessionid");
-    if (!csrf || !ds || !sid) {
+    if (!csrf && !ds) {
       throw new Error(
-        "No hay sesion activa de Instagram en este navegador. Inicia sesion en instagram.com y reintenta."
+        "No hay cookies de sesion visibles (csrftoken y ds_user_id ausentes). Asegurate de estar logueado en instagram.com."
       );
     }
-    return { csrf, dsUserId: ds };
+    if (!csrf) {
+      // Sin csrftoken muchas APIs igual responden, pero avisamos suave.
+      sendProgress("Aviso: csrftoken no detectado, intentamos API igual.");
+    }
+    return { csrf: csrf || "", dsUserId: ds || "" };
   }
 
   function buildRankToken(dsUserId) {
@@ -416,7 +421,13 @@
 
   async function runApiMode(profile) {
     sendProgress("Intentando modo API...");
-    const session = ensureLoggedIn();
+    let session;
+    try {
+      session = ensureLoggedIn();
+    } catch (_e) {
+      // No bloqueamos: cookies HttpOnly (sessionid) no son visibles desde JS.
+      session = { csrf: getCookie("csrftoken") || "", dsUserId: getCookie("ds_user_id") || "" };
+    }
     const info = await getProfileInfoApi(profile);
     sendProgress(
       `API profile ok: user_id=${info.id}, followers=${info.followersCount || "?"}, following=${info.followingCount || "?"}`
@@ -1260,10 +1271,11 @@
 
       try {
         ensureLoggedIn();
-        sendProgress("Sesion de Instagram detectada.");
+        sendProgress("Cookies de sesion detectadas.");
       } catch (sessionErr) {
-        // No abortamos: el modo UI puede funcionar leyendo el DOM aun con sesion debil.
-        sendProgress(`Aviso sesion: ${sessionErr.message}`);
+        // No abortamos: muchas cookies (sessionid) son HttpOnly y no se ven desde JS.
+        // Si el modo API realmente no esta autorizado, el 401 lo mostrara.
+        sendProgress(`Aviso: ${sessionErr.message}`);
       }
 
       let usedApi = false;
