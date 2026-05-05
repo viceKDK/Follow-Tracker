@@ -1189,7 +1189,6 @@
       if (container.scrollTop === before) break;
       guard += 1;
     }
-    sendProgress(`${phaseKey}: barrido lento completo (+${totalAdded})`);
     return totalAdded;
   }
 
@@ -1213,7 +1212,6 @@
         if (container.scrollTop === before) break;
         guard += 1;
       }
-      sendProgress(`${phaseKey}: deep-rescan pasada ${p}/${passes} (+${totalAdded})`);
     }
     return totalAdded;
   }
@@ -1230,25 +1228,31 @@
       document.querySelector('div[role="dialog"]') || getRouteScope(phase.key) || container;
     let prevVisible = collectVisibleUsernames(initialScope);
 
+    // Set total inicial en el overlay para esta fase del UI.
+    if (Number.isFinite(expectedCount) && expectedCount > 0) {
+      updateCount(phase.key, 0, expectedCount);
+    } else {
+      updateCount(phase.key, 0, null);
+    }
+
     // Hidratacion: esperamos a que el modal pinte mas anchors antes de empezar.
     let initialAnchors = initialScope.querySelectorAll("a[href]").length;
     let hydrationWait = 0;
     while (hydrationWait < 12) {
       await sleep(350);
       extractUsers(container, data, phase.key);
+      updateCount(phase.key, data.size, null);
       const a = (document.querySelector('div[role="dialog"]') || getRouteScope(phase.key) || container)
         .querySelectorAll("a[href]").length;
       if (a > initialAnchors) initialAnchors = a;
-      // Si ya tenemos lo esperado, paramos de esperar.
       if (Number.isFinite(expectedCount) && expectedCount > 0 && data.size >= expectedCount) break;
-      // Si la lista es muy corta y ya tenemos al menos N>=expectedCount, listo.
       if (Number.isFinite(expectedCount) && expectedCount <= 20 && a >= expectedCount + 1) break;
       hydrationWait += 1;
     }
-    setOverlay(profile, phase.key, data.size, "Recolectando...", "#a2f3a6");
-    sendProgress(
-      `${phase.key}: ${data.size} usuarios (inicio, anchors=${initialAnchors}, esperado=${expectedCount || "?"})`
-    );
+    const phaseLabel = phase.key === "followers" ? "Cargando seguidores" : "Cargando seguidos";
+    setOverlay(profile, null, null, `${phaseLabel}...`, "#a2f3a6");
+    const lbl = phase.key === "followers" ? "Seguidores" : "Seguidos";
+    sendProgress(`${lbl}: ${pctText(data.size, expectedCount)}`);
 
     // Caso lista corta ya completa: salimos sin meter loops de recuperacion.
     if (Number.isFinite(expectedCount) && expectedCount > 0 && data.size >= expectedCount) {
@@ -1281,9 +1285,7 @@
       const currVisible = collectVisibleUsernames(liveScope);
       const overlap = continuityOverlap(prevVisible, currVisible);
       if (prevVisible.length > 0 && currVisible.length > 0 && overlap < CONFIG.continuityMinOverlap) {
-        sendProgress(
-          `${phase.key}: continuidad baja (${overlap}/${CONFIG.continuityTail}), aplicando scroll correctivo`
-        );
+        // scroll correctivo silencioso (ruido tecnico)
         container.scrollTop = Math.max(0, container.scrollTop - Math.floor((container.clientHeight || 600) * 0.6));
         await sleep(700);
         const mini = Math.max(160, Math.floor((container.clientHeight || 600) * 0.25));
@@ -1295,10 +1297,10 @@
       }
 
       const added = extractUsers(container, data, phase.key);
-      setOverlay(profile, phase.key, data.size, `En curso (+${added})`, "#a2f3a6");
-      // Throttle logs cada 5 ciclos o si suma usuarios.
-      if (added > 0 || prevCount !== data.size || stagnant === 0) {
-        sendProgress(`${phase.key}: ${data.size} usuarios (+${added})`);
+      updateCount(phase.key, data.size, expectedCount || null);
+      setOverlay(profile, null, null, `${phaseLabel}...`, "#a2f3a6");
+      if (added > 0) {
+        sendProgress(`${lbl}: ${pctText(data.size, expectedCount)}`);
       }
       sendBadge(data.size > 999 ? `${Math.floor(data.size / 1000)}k` : String(data.size));
       prevVisible = currVisible;
@@ -1307,7 +1309,7 @@
       // Si llegamos al fondo del contenedor y no suma, terminamos limpio.
       const atBottom = container.scrollHeight - (container.scrollTop + (container.clientHeight || 0)) < 4;
       if (added === 0 && countUnchanged && atBottom && data.size > 0) {
-        sendProgress(`${phase.key}: fondo de la lista alcanzado (${data.size}).`);
+        sendProgress(`${lbl}: lista completa (${data.size}).`);
         break;
       }
       if (added === 0 && countUnchanged) {
@@ -1318,7 +1320,7 @@
           if (clearlyIncomplete && recoveries < 4) {
             recoveries += 1;
             sendProgress(
-              `${phase.key}: atascado en ${data.size}/${expectedCount}, intento recuperacion ${recoveries}/4`
+              `${lbl}: cargando los que faltan (${pctText(data.size, expectedCount)})...`
             );
             container.scrollTop = Math.max(0, container.scrollTop - (container.clientHeight || 600) * 4);
             await sleep(1200 + recoveries * 400);
@@ -1341,7 +1343,6 @@
                 activeIndex = idx;
                 container = candidate;
                 switched = true;
-                sendProgress(`${phase.key}: cambio a contenedor alternativo #${idx}`);
                 break;
               }
             }
@@ -1352,12 +1353,13 @@
             continue;
           }
           if (clearlyIncomplete) {
-            sendProgress(`${phase.key}: ejecutando deep-rescan final (${data.size}/${expectedCount})`);
+            sendProgress(`${lbl}: ultimo intento (${pctText(data.size, expectedCount)})...`);
             await deepRescan(container, data, phase.key);
+            updateCount(phase.key, data.size, expectedCount || null);
             if (data.size < Math.floor(expectedCount * 0.98)) {
-              sendProgress(
-                `${phase.key}: final parcial ${data.size}/${expectedCount} (Instagram no entrego mas items visibles)`
-              );
+              sendProgress(`${lbl}: ${pctText(data.size, expectedCount)} (IG no entrega mas).`);
+            } else {
+              sendProgress(`${lbl}: ${pctText(data.size, expectedCount)} terminado.`);
             }
           }
           break;
@@ -1535,8 +1537,9 @@
       if (!usedApi) {
         const phaseResults = {};
         for (const phase of PHASES) {
-          setOverlay(profile, phase.key, 0, `Abriendo ${phase.key}...`, "#a2f3a6");
-          sendProgress(`Abriendo ${phase.key}...`);
+          const phLbl = phase.key === "followers" ? "seguidores" : "seguidos";
+          setOverlay(profile, null, null, `Abriendo lista de ${phLbl}...`, "#a2f3a6");
+          sendProgress(`Abriendo lista de ${phLbl}...`);
           const phaseMeta = await openDialogForPhase(phase);
           await sleep(650);
           phaseResults[phase.key] = await scrapeCurrentDialog(
@@ -1544,7 +1547,7 @@
             profile,
             phaseMeta && Number.isFinite(phaseMeta.expectedCount) ? phaseMeta.expectedCount : null
           );
-          sendProgress(`CSV ${phase.key} descargado: ${phaseResults[phase.key].filename}`);
+          sendProgress(`Descargado: lista de ${phLbl} (${phaseResults[phase.key].rows.length}).`);
           await closeDialog();
           await sleep(CONFIG.phaseDelayMs);
         }
