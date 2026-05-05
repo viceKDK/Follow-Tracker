@@ -20,12 +20,24 @@ Herramienta para comparar seguidores y seguidos de Instagram.
 
 Recomendado para usuario final.
 
-1. Abre `chrome://extensions` o `edge://extensions`.
-2. Activa `Modo desarrollador`.
-3. Pulsa `Cargar descomprimida`.
-4. Selecciona la carpeta `extension` del proyecto.
-5. Abre Instagram en el perfil objetivo (ejemplo: `https://www.instagram.com/usuario/`).
-6. Abre el popup y pulsa `Iniciar analisis`.
+### Video tutorial
+
+[![Ver tutorial en YouTube](https://img.shields.io/badge/YouTube-Ver%20tutorial-red?logo=youtube&logoColor=white)](https://youtu.be/TU_VIDEO_ID)
+
+> Reemplaza `TU_VIDEO_ID` con el ID de tu video unlisted.
+
+### Pasos con capturas
+
+| # | Acción | Captura |
+|---|--------|---------|
+| 1 | Abre `chrome://extensions` (o `edge://extensions`) | ![Paso 1](docs/01-extensions.png) |
+| 2 | Activa **Modo desarrollador** (esquina superior derecha) | ![Paso 2](docs/02-dev-mode.png) |
+| 3 | Pulsa **Cargar descomprimida** y selecciona la carpeta `extension/` | ![Paso 3](docs/03-load-unpacked.png) |
+| 4 | Fija el icono de la extensión en la barra | ![Paso 4](docs/04-pin-icon.png) |
+| 5 | Abre Instagram en el perfil objetivo y pulsa el icono de la extensión. El panel flotante aparece arriba a la derecha. Click en **Iniciar análisis** | ![Paso 5](docs/05-overlay.png) |
+| 6 | Espera a que termine. Los archivos se descargan automáticamente | ![Paso 6](docs/06-result.png) |
+
+> Las imágenes están en `docs/`. Mientras no las subas, GitHub muestra un cuadro vacío en cada fila.
 
 Qué hace automáticamente:
 

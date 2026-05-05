@@ -28,3 +28,9 @@ ENV/
 *.webp
 convert_icon.py
 check_transparency.py
+
+# Pero permitimos las imagenes de la guia
+!docs/
+!docs/*.png
+!docs/*.jpg
+!docs/*.gif
