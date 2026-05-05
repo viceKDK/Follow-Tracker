@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Follow Tracker Auto",
   "description": "Analiza followers/following de un perfil de Instagram en 1 clic, sin consola.",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "permissions": [
     "activeTab",
     "tabs",

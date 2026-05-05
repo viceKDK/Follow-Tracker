@@ -697,6 +697,7 @@
     // 3) texto propio del trigger (sin descender a hermanos del contenedor)
     const ownText = parseCountFromText(trigger.textContent || "");
     if (ownText) return ownText;
+    // Si nada confiable, mejor null que un numero equivocado (evita falso "incompleto").
     return null;
   }
 
@@ -1024,13 +1025,30 @@
       document.querySelector('div[role="dialog"]') || getRouteScope(phase.key) || container;
     let prevVisible = collectVisibleUsernames(initialScope);
 
-    // Toma inicial de elementos visibles antes de empezar a mover.
-    extractUsers(container, data, phase.key);
-    const initialAnchors = initialScope.querySelectorAll("a[href]").length;
+    // Hidratacion: esperamos a que el modal pinte mas anchors antes de empezar.
+    let initialAnchors = initialScope.querySelectorAll("a[href]").length;
+    let hydrationWait = 0;
+    while (hydrationWait < 12) {
+      await sleep(350);
+      extractUsers(container, data, phase.key);
+      const a = (document.querySelector('div[role="dialog"]') || getRouteScope(phase.key) || container)
+        .querySelectorAll("a[href]").length;
+      if (a > initialAnchors) initialAnchors = a;
+      // Si ya tenemos lo esperado, paramos de esperar.
+      if (Number.isFinite(expectedCount) && expectedCount > 0 && data.size >= expectedCount) break;
+      // Si la lista es muy corta y ya tenemos al menos N>=expectedCount, listo.
+      if (Number.isFinite(expectedCount) && expectedCount <= 20 && a >= expectedCount + 1) break;
+      hydrationWait += 1;
+    }
     setOverlay(profile, phase.key, data.size, "Recolectando...", "#a2f3a6");
     sendProgress(
       `${phase.key}: ${data.size} usuarios (inicio, anchors=${initialAnchors}, esperado=${expectedCount || "?"})`
     );
+
+    // Caso lista corta ya completa: salimos sin meter loops de recuperacion.
+    if (Number.isFinite(expectedCount) && expectedCount > 0 && data.size >= expectedCount) {
+      sendProgress(`${phase.key}: lista completa al inicio (${data.size}/${expectedCount}), sin scroll.`);
+    }
 
     while (data.size < CONFIG.maxUsers) {
       checkAbort();
@@ -1081,6 +1099,12 @@
       prevVisible = currVisible;
 
       const countUnchanged = data.size === prevCount;
+      // Si llegamos al fondo del contenedor y no suma, terminamos limpio.
+      const atBottom = container.scrollHeight - (container.scrollTop + (container.clientHeight || 0)) < 4;
+      if (added === 0 && countUnchanged && atBottom && data.size > 0) {
+        sendProgress(`${phase.key}: fondo de la lista alcanzado (${data.size}).`);
+        break;
+      }
       if (added === 0 && countUnchanged) {
         stagnant += 1;
         if (stagnant >= CONFIG.stagnantAttempts) {
