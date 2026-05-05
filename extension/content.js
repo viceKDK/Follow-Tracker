@@ -14,6 +14,8 @@
     apiInterPageMs: 600,
     apiMaxBackoffMs: 30000,
     apiCompletenessRatio: 0.95,
+    apiMaxRepechajes: 6,
+    apiNoProgressBail: 3,
   };
 
   const PHASES = [
@@ -52,8 +54,8 @@
       "top:20px",
       "right:20px",
       "z-index:2147483647",
-      "width:320px",
-      "background:rgba(10,18,28,.92)",
+      "width:340px",
+      "background:rgba(10,18,28,.94)",
       "color:#d9f2ff",
       "border:2px solid #1fa37d",
       "border-radius:12px",
@@ -64,20 +66,58 @@
     overlay.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <div style="font-size:14px;font-weight:700;color:#7de8c6;">Follow Tracker Auto</div>
-        <button id="ft-close" style="border:none;background:#ef4444;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;">X</button>
+        <div style="display:flex;gap:4px;">
+          <button id="ft-min" title="Minimizar" style="border:none;background:#374151;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;">_</button>
+          <button id="ft-close" title="Cerrar" style="border:none;background:#ef4444;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;">X</button>
+        </div>
       </div>
-      <div style="font-size:12px;margin-bottom:4px;">Perfil: <span id="ft-profile">-</span></div>
-      <div style="font-size:12px;margin-bottom:4px;">Fase: <span id="ft-phase">-</span></div>
-      <div style="font-size:12px;margin-bottom:4px;">Usuarios: <span id="ft-count">0</span></div>
-      <div id="ft-status" style="font-size:12px;color:#a2f3a6;">Iniciando...</div>
-      <div id="ft-log" style="margin-top:8px;max-height:120px;overflow:auto;background:rgba(255,255,255,.05);padding:6px;border-radius:8px;font-size:11px;line-height:1.35;"></div>
+      <div id="ft-body">
+        <div style="font-size:12px;margin-bottom:4px;">Perfil: <span id="ft-profile">-</span></div>
+        <div style="font-size:12px;margin-bottom:4px;">Fase: <span id="ft-phase">-</span></div>
+        <div style="font-size:12px;margin-bottom:4px;">Usuarios: <span id="ft-count">0</span></div>
+        <div id="ft-status" style="font-size:12px;color:#a2f3a6;">Listo. Pulsa Iniciar.</div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button id="ft-start" style="flex:1;border:none;background:linear-gradient(120deg,#1177cc,#0d8f74);color:#fff;border-radius:8px;padding:8px;cursor:pointer;font-weight:700;font-size:12px;">Iniciar analisis</button>
+          <button id="ft-cancel" disabled style="flex:1;border:none;background:#6b7280;color:#fff;border-radius:8px;padding:8px;cursor:pointer;font-weight:700;font-size:12px;opacity:.5;">Cancelar</button>
+        </div>
+        <div id="ft-log" style="margin-top:8px;max-height:140px;overflow:auto;background:rgba(255,255,255,.05);padding:6px;border-radius:8px;font-size:11px;line-height:1.35;font-family:Consolas,monospace;"></div>
+      </div>
     `;
     overlay.querySelector("#ft-close").addEventListener("click", () => {
       overlay.remove();
       overlay = null;
     });
+    overlay.querySelector("#ft-min").addEventListener("click", () => {
+      const body = overlay.querySelector("#ft-body");
+      body.style.display = body.style.display === "none" ? "block" : "none";
+    });
+    overlay.querySelector("#ft-start").addEventListener("click", () => {
+      if (running) return;
+      runAnalysis().catch(() => { /* el overlay ya muestra el error */ });
+    });
+    overlay.querySelector("#ft-cancel").addEventListener("click", () => {
+      if (running) aborted = true;
+    });
     document.body.appendChild(overlay);
     return overlay;
+  }
+
+  function setOverlayButtonsBusy(isBusy) {
+    if (!overlay) return;
+    const start = overlay.querySelector("#ft-start");
+    const cancel = overlay.querySelector("#ft-cancel");
+    if (start) {
+      start.disabled = isBusy;
+      start.style.opacity = isBusy ? "0.5" : "1";
+      start.textContent = isBusy ? "Ejecutando..." : "Iniciar analisis";
+    }
+    if (cancel) {
+      cancel.disabled = !isBusy;
+      cancel.style.opacity = isBusy ? "1" : "0.5";
+      cancel.style.background = isBusy
+        ? "linear-gradient(120deg,#dc2626,#991b1b)"
+        : "#6b7280";
+    }
   }
 
   function setOverlay(profile, phase, count, status, color) {
@@ -364,19 +404,24 @@
       });
 
       page += 1;
-      // Throttle de logs: cada 3 paginas o si hay cambio significativo.
-      if (page % 3 === 0 || added === 0 || (expectedCount && out.length >= expectedCount)) {
-        sendProgress(
-          `${phaseKey} [API]: ${out.length} usuarios (+${added})` +
-            (expectedCount ? ` de ${expectedCount}` : "") +
-            ` p${page}`
-        );
-      }
-      setOverlay(getProfileFromPath(), `${phaseKey} api`, out.length, `Pagina ${page} (+${added})`, "#a2f3a6");
-      sendBadge(out.length > 999 ? `${Math.floor(out.length / 1000)}k` : String(out.length));
-
       const nextMax = json && (json.next_max_id || json.next_min_id);
       const nextMaxStr = nextMax !== undefined && nextMax !== null && nextMax !== "" ? String(nextMax) : null;
+      // "pag" = lote de 100 usuarios entregado por IG. Para listas grandes
+      // necesitamos varias. cursor= es el next_max_id que IG nos da para
+      // pedir la siguiente pag.
+      const cursorPreview = nextMaxStr ? String(nextMaxStr).slice(0, 10) + "..." : "fin";
+      const totalPagsEstimadas = expectedCount
+        ? Math.max(1, Math.ceil(expectedCount / CONFIG.apiPageSize))
+        : "?";
+      if (page % 3 === 0 || added === 0 || (expectedCount && out.length >= expectedCount)) {
+        sendProgress(
+          `${phaseKey} API: ${out.length} usuarios (+${added})` +
+            (expectedCount ? ` de ${expectedCount}` : "") +
+            ` | pag ${page}/${totalPagsEstimadas} cursor=${cursorPreview}`
+        );
+      }
+      setOverlay(getProfileFromPath(), `${phaseKey} api`, out.length, `pag ${page} (+${added})`, "#a2f3a6");
+      sendBadge(out.length > 999 ? `${Math.floor(out.length / 1000)}k` : String(out.length));
 
       if (added === 0 && (!users || users.length === 0)) {
         emptyStreak += 1;
@@ -458,35 +503,72 @@
     sendProgress(`Followers ${pctText(followersRows.length, info.followersCount)}`);
     sendProgress(`Following ${pctText(followingRows.length, info.followingCount)}`);
 
-    // Si una de las dos quedo claramente bajo el umbral, intentamos un repechaje
-    // antes de aceptar el resultado parcial.
+    // Loop de repechajes: insistimos hasta alcanzar el total real o agotar
+    // CONFIG.apiNoProgressBail ciclos sin sumar nuevos.
+    async function ensureFull(phaseKey, expected, currentRows) {
+      if (!Number.isFinite(expected) || expected <= 0) return currentRows;
+      let rows = currentRows;
+      let lastSize = rows.length;
+      let noProgress = 0;
+      for (let r = 1; r <= CONFIG.apiMaxRepechajes; r += 1) {
+        if (rows.length >= expected) break;
+        sendProgress(`Repechaje ${phaseKey} #${r}/${CONFIG.apiMaxRepechajes} (${pctText(rows.length, expected)})...`);
+        await sleep(1200 + r * 400);
+        checkAbort();
+        const retry = await paginateFriendshipApi(
+          info.id,
+          phaseKey,
+          expected,
+          session.dsUserId,
+          profile
+        );
+        rows = await mergeWithProfileCache(profile, phaseKey, retry);
+        const delta = rows.length - lastSize;
+        sendProgress(`Repechaje ${phaseKey} #${r}: +${delta} -> ${pctText(rows.length, expected)}`);
+        if (rows.length >= expected) {
+          sendProgress(`${phaseKey}: 100% completado en repechaje #${r}.`);
+          break;
+        }
+        if (delta <= 0) {
+          noProgress += 1;
+          if (noProgress >= CONFIG.apiNoProgressBail) {
+            sendProgress(
+              `${phaseKey}: ${noProgress} repechajes sin sumar usuarios nuevos. IG no entrega mas via API.`
+            );
+            break;
+          }
+        } else {
+          noProgress = 0;
+        }
+        lastSize = rows.length;
+      }
+      return rows;
+    }
+
     if (!followersOk && Number.isFinite(info.followersCount) && info.followersCount > 0) {
-      sendProgress(`Followers parcial (<${Math.round(CONFIG.apiCompletenessRatio * 100)}%), repechaje API...`);
-      const retry = await paginateFriendshipApi(
-        info.id,
-        "followers",
-        info.followersCount,
-        session.dsUserId,
-        profile
-      );
-      const merged = await mergeWithProfileCache(profile, "followers", retry);
+      sendProgress(`Followers parcial (${pctText(followersRows.length, info.followersCount)}), iniciando ciclo de repechajes...`);
+      const next = await ensureFull("followers", info.followersCount, followersRows);
       followersRows.length = 0;
-      Array.prototype.push.apply(followersRows, merged);
-      sendProgress(`Repechaje followers ${pctText(followersRows.length, info.followersCount)}`);
+      Array.prototype.push.apply(followersRows, next);
     }
     if (!followingOk && Number.isFinite(info.followingCount) && info.followingCount > 0) {
-      sendProgress(`Following parcial (<${Math.round(CONFIG.apiCompletenessRatio * 100)}%), repechaje API...`);
-      const retry = await paginateFriendshipApi(
-        info.id,
-        "following",
-        info.followingCount,
-        session.dsUserId,
-        profile
-      );
-      const merged = await mergeWithProfileCache(profile, "following", retry);
+      sendProgress(`Following parcial (${pctText(followingRows.length, info.followingCount)}), iniciando ciclo de repechajes...`);
+      const next = await ensureFull("following", info.followingCount, followingRows);
       followingRows.length = 0;
-      Array.prototype.push.apply(followingRows, merged);
-      sendProgress(`Repechaje following ${pctText(followingRows.length, info.followingCount)}`);
+      Array.prototype.push.apply(followingRows, next);
+    }
+    // Aunque hayan pasado el umbral 95%, si no estan al 100% probamos 1 repechaje extra.
+    if (followersRows.length < info.followersCount && Number.isFinite(info.followersCount)) {
+      sendProgress(`Followers en ${pctText(followersRows.length, info.followersCount)}, repechaje extra para 100%...`);
+      const next = await ensureFull("followers", info.followersCount, followersRows);
+      followersRows.length = 0;
+      Array.prototype.push.apply(followersRows, next);
+    }
+    if (followingRows.length < info.followingCount && Number.isFinite(info.followingCount)) {
+      sendProgress(`Following en ${pctText(followingRows.length, info.followingCount)}, repechaje extra para 100%...`);
+      const next = await ensureFull("following", info.followingCount, followingRows);
+      followingRows.length = 0;
+      Array.prototype.push.apply(followingRows, next);
     }
 
     // Solo abortamos si ambas estan absurdamente bajas (<50%) — ahi conviene el UI fallback.
@@ -1287,11 +1369,13 @@
     aborted = false;
     activeProfile = getProfileFromPath();
     sendBadge("RUN", "#1fa37d");
+    setOverlayButtonsBusy(true);
 
     try {
       const profile = activeProfile;
       setOverlay(profile, "preparando", 0, "Iniciando analisis...", "#a2f3a6");
       sendProgress(`Perfil detectado: ${profile}`);
+      sendProgress(`Glosario: "pag X" = lote API de ${CONFIG.apiPageSize} usuarios; cursor = next_max_id que entrega IG.`);
 
       try {
         ensureLoggedIn();
@@ -1383,6 +1467,7 @@
       running = false;
       activeProfile = null;
       aborted = false;
+      setOverlayButtonsBusy(false);
     }
   }
 
@@ -1409,4 +1494,26 @@
 
     return true;
   });
+
+  // Auto-show del overlay cuando estamos en una pagina de perfil.
+  function maybeShowOverlay() {
+    if (!onProfilePage()) return;
+    const profile = getProfileFromPath();
+    setOverlay(profile, "-", 0, "Listo. Pulsa Iniciar.", "#a2f3a6");
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", maybeShowOverlay, { once: true });
+  } else {
+    setTimeout(maybeShowOverlay, 800);
+  }
+
+  // Detectar SPA navegacion de IG (push/popstate) y refrescar el overlay.
+  let lastPath = location.pathname;
+  setInterval(() => {
+    if (location.pathname !== lastPath) {
+      lastPath = location.pathname;
+      if (onProfilePage()) maybeShowOverlay();
+    }
+  }, 1500);
 })();

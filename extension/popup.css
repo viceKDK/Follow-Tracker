@@ -69,15 +69,10 @@ button:disabled {
   opacity: 0.55;
 }
 
-#log {
+.footer {
   margin: 10px 0 0;
-  padding: 10px;
-  border-radius: 10px;
-  min-height: 120px;
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  background: #0b1b24;
-  color: #d3edf7;
-  font-size: 11px;
+  font-size: 10px;
+  color: #6b7280;
+  line-height: 1.4;
+  text-align: center;
 }
