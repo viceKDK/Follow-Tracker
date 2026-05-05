@@ -165,7 +165,6 @@
       #ft-auto-overlay .ft-log .ft-log-line:last-child { border-bottom: 0; }
       #ft-auto-overlay .ft-log::-webkit-scrollbar { width: 6px; }
       #ft-auto-overlay .ft-log::-webkit-scrollbar-thumb { background: #c8d4dc; border-radius: 3px; }
-      #ft-auto-overlay.ft-min .ft-body { display: none; }
     `;
     document.head.appendChild(style);
   }
@@ -181,7 +180,7 @@
       <div class="ft-header">
         <div class="ft-title">Follow Tracker Auto</div>
         <div>
-          <button id="ft-min" class="ft-icon-btn" title="Minimizar">_</button>
+          <button id="ft-min" class="ft-icon-btn" title="Ocultar (volver a abrir desde el icono de la extension)">_</button>
           <button id="ft-close" class="ft-icon-btn" title="Cerrar">×</button>
         </div>
       </div>
@@ -202,7 +201,8 @@
       overlay = null;
     });
     overlay.querySelector("#ft-min").addEventListener("click", () => {
-      overlay.classList.toggle("ft-min");
+      // Oculta toda la barra. Para volver a mostrarla, click en el icono de la extension.
+      overlay.style.display = "none";
     });
     overlay.querySelector("#ft-start").addEventListener("click", () => {
       if (running) return;
@@ -1648,7 +1648,8 @@
   function showOverlayIfProfile() {
     if (!onProfilePage()) return false;
     const profile = getProfileFromPath();
-    setOverlay(profile, "-", 0, "Listo. Pulsa Iniciar.", "#a2f3a6");
+    setOverlay(profile, null, null, running ? "Analisis en curso..." : "Listo. Pulsa Iniciar.", "#a2f3a6");
+    if (overlay) overlay.style.display = "block";
     return true;
   }
 
