@@ -12,7 +12,11 @@
       <p class="hint">
         Abre un perfil de Instagram y pulsa el boton. La extension hara followers + following y descargara resultados.
       </p>
-      <button id="startBtn">Iniciar analisis</button>
+      <div id="tabStatus" class="tabStatus"></div>
+      <div class="actions">
+        <button id="startBtn">Iniciar analisis</button>
+        <button id="cancelBtn" class="secondary" disabled>Cancelar</button>
+      </div>
       <pre id="log"></pre>
     </main>
     <script src="popup.js"></script>

@@ -1,5 +1,5 @@
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("Follow Tracker Auto extension instalada.");
+  chrome.action.setBadgeBackgroundColor({ color: "#1fa37d" });
 });
 
 function sendMessageToTab(tabId, message) {
@@ -15,26 +15,70 @@ function sendMessageToTab(tabId, message) {
   });
 }
 
-async function startAnalysisInTab(tabId) {
-  let response = await sendMessageToTab(tabId, { type: "START_ANALYSIS" });
-
-  if (!response.ok && String(response.error || "").includes("Receiving end does not exist")) {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ["content.js"],
-    });
-    response = await sendMessageToTab(tabId, { type: "START_ANALYSIS" });
+async function ensureContentLoaded(tabId) {
+  const ping = await sendMessageToTab(tabId, { type: "PING" });
+  if (ping.ok) return ping;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+  } catch (e) {
+    return { ok: false, error: `No se pudo inyectar content.js: ${e.message || e}` };
   }
-
-  return response;
+  return await sendMessageToTab(tabId, { type: "PING" });
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (!msg || msg.type !== "START_FROM_POPUP") return undefined;
+async function startAnalysisInTab(tabId) {
+  const loaded = await ensureContentLoaded(tabId);
+  if (!loaded.ok) return loaded;
+  return await sendMessageToTab(tabId, { type: "START_ANALYSIS" });
+}
 
-  startAnalysisInTab(msg.tabId)
-    .then((response) => sendResponse(response))
-    .catch((error) => sendResponse({ ok: false, error: error.message || "Error." }));
+async function cancelAnalysisInTab(tabId) {
+  return await sendMessageToTab(tabId, { type: "CANCEL_ANALYSIS" });
+}
 
-  return true;
+function setBadgeFor(tabId, text, color) {
+  try {
+    chrome.action.setBadgeText({ text: String(text || ""), tabId });
+    if (color) chrome.action.setBadgeBackgroundColor({ color, tabId });
+  } catch (_e) {}
+}
+
+function clearBadgeAfter(tabId, ms) {
+  setTimeout(() => {
+    try { chrome.action.setBadgeText({ text: "", tabId }); } catch (_e) {}
+  }, ms);
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg) return undefined;
+
+  if (msg.type === "START_FROM_POPUP") {
+    startAnalysisInTab(msg.tabId)
+      .then((response) => sendResponse(response))
+      .catch((error) => sendResponse({ ok: false, error: error.message || "Error." }));
+    return true;
+  }
+
+  if (msg.type === "CANCEL_FROM_POPUP") {
+    cancelAnalysisInTab(msg.tabId)
+      .then((response) => sendResponse(response))
+      .catch((error) => sendResponse({ ok: false, error: error.message || "Error." }));
+    return true;
+  }
+
+  if (msg.source === "content") {
+    const tabId = sender && sender.tab && sender.tab.id;
+    if (msg.type === "badge" && tabId) {
+      setBadgeFor(tabId, msg.text, msg.color);
+      if (msg.text === "OK" || msg.text === "ERR" || msg.text === "CXL") {
+        clearBadgeAfter(tabId, 8000);
+      }
+    }
+  }
+
+  return undefined;
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  try { chrome.action.setBadgeText({ text: "", tabId }); } catch (_e) {}
 });

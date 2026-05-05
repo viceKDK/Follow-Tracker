@@ -22,8 +22,24 @@
   ];
 
   let running = false;
+  let aborted = false;
+  let activeProfile = null;
   let overlay = null;
   const overlayLogs = [];
+
+  class AbortedError extends Error {
+    constructor(reason) {
+      super(reason || "Cancelado por el usuario.");
+      this.name = "AbortedError";
+    }
+  }
+
+  function checkAbort() {
+    if (aborted) throw new AbortedError();
+    if (activeProfile && getProfileFromPath() !== activeProfile) {
+      throw new AbortedError(`Cambio de perfil detectado (${activeProfile} -> ${getProfileFromPath()}).`);
+    }
+  }
 
   function ensureOverlay() {
     if (overlay && document.body.contains(overlay)) return overlay;
@@ -85,20 +101,51 @@
   }
 
   function sendProgress(text) {
-    chrome.runtime.sendMessage({ source: "content", type: "progress", text });
+    try { chrome.runtime.sendMessage({ source: "content", type: "progress", text }); } catch (_e) {}
     appendOverlayLog(text);
   }
 
   function sendDone() {
-    chrome.runtime.sendMessage({ source: "content", type: "done" });
+    try { chrome.runtime.sendMessage({ source: "content", type: "done" }); } catch (_e) {}
   }
 
   function sendError(text) {
-    chrome.runtime.sendMessage({ source: "content", type: "error", text });
+    try { chrome.runtime.sendMessage({ source: "content", type: "error", text }); } catch (_e) {}
+  }
+
+  function sendBadge(text, color) {
+    try {
+      chrome.runtime.sendMessage({
+        source: "content",
+        type: "badge",
+        text: String(text || "").slice(0, 4),
+        color: color || "#1fa37d",
+      });
+    } catch (_e) {}
   }
 
   function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => {
+      const total = Math.max(0, ms);
+      const tick = 200;
+      let elapsed = 0;
+      const id = setInterval(() => {
+        if (aborted) {
+          clearInterval(id);
+          resolve();
+          return;
+        }
+        elapsed += tick;
+        if (elapsed >= total) {
+          clearInterval(id);
+          resolve();
+        }
+      }, Math.min(tick, total || tick));
+      if (total === 0) {
+        clearInterval(id);
+        resolve();
+      }
+    });
   }
 
   function randomSleep() {
@@ -245,9 +292,19 @@
   async function getProfileInfoApi(username) {
     const url = `/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
     const referer = `${location.origin}/${username}/`;
-    const json = await igFetchJson(url, { referer });
+    let json;
+    try {
+      json = await igFetchJson(url, { referer });
+    } catch (e) {
+      if (/API 404/.test(e.message)) {
+        throw new Error(`El perfil @${username} no existe o fue eliminado.`);
+      }
+      throw e;
+    }
     const user = json && json.data && json.data.user;
-    if (!user || !user.id) throw new Error("No se pudo obtener user_id via API.");
+    if (!user || !user.id) {
+      throw new Error(`No se pudo obtener user_id de @${username} (¿perfil oculto o renombrado?).`);
+    }
     if (user.is_private && !user.followed_by_viewer) {
       throw new Error("Cuenta privada y no la sigues: no se puede listar via API.");
     }
@@ -262,7 +319,7 @@
   function mapApiUser(u) {
     const username = normalizeUsernameCandidate(u && u.username);
     if (!username) return null;
-    const fullName = String((u && u.full_name) || "Sin Nombre").replace(/,/g, " ");
+    const fullName = String((u && u.full_name) || "Sin Nombre").trim() || "Sin Nombre";
     return { username, fullName };
   }
 
@@ -280,6 +337,7 @@
       : CONFIG.maxUsers;
 
     while (page < 600 && out.length < targetCap) {
+      checkAbort();
       const qs = new URLSearchParams();
       qs.set("count", String(CONFIG.apiPageSize));
       qs.set("rank_token", rankToken);
@@ -301,12 +359,16 @@
       });
 
       page += 1;
-      sendProgress(
-        `${phaseKey} [API]: ${out.length} usuarios (+${added})` +
-          (expectedCount ? ` de ${expectedCount}` : "") +
-          ` p${page}`
-      );
+      // Throttle de logs: cada 3 paginas o si hay cambio significativo.
+      if (page % 3 === 0 || added === 0 || (expectedCount && out.length >= expectedCount)) {
+        sendProgress(
+          `${phaseKey} [API]: ${out.length} usuarios (+${added})` +
+            (expectedCount ? ` de ${expectedCount}` : "") +
+            ` p${page}`
+        );
+      }
       setOverlay(getProfileFromPath(), `${phaseKey} api`, out.length, `Pagina ${page} (+${added})`, "#a2f3a6");
+      sendBadge(out.length > 999 ? `${Math.floor(out.length / 1000)}k` : String(out.length));
 
       const nextMax = json && (json.next_max_id || json.next_min_id);
       const nextMaxStr = nextMax !== undefined && nextMax !== null && nextMax !== "" ? String(nextMax) : null;
@@ -428,12 +490,12 @@
     const safeProfile = toSafeFilePart(profile);
     const followersCsvName = `ig_auto_${safeProfile}_followers_${Date.now()}.csv`;
     const followersCsv = buildCsvFromRows(followersRows, ts);
-    downloadText(followersCsvName, followersCsv, "text/csv;charset=utf-8;");
+    downloadText(followersCsvName, "﻿" + followersCsv, "text/csv;charset=utf-8;");
     sendProgress(`CSV followers descargado: ${followersCsvName}`);
 
     const followingCsvName = `ig_auto_${safeProfile}_following_${Date.now()}.csv`;
     const followingCsv = buildCsvFromRows(followingRows, ts);
-    downloadText(followingCsvName, followingCsv, "text/csv;charset=utf-8;");
+    downloadText(followingCsvName, "﻿" + followingCsv, "text/csv;charset=utf-8;");
     sendProgress(`CSV following descargado: ${followingCsvName}`);
 
     const comparison = buildComparison(followersRows, followingRows);
@@ -849,7 +911,7 @@
       let fullName = "Sin Nombre";
       const text = (el.innerText || "").trim();
       if (text && text.toLowerCase() !== username.toLowerCase()) {
-        fullName = text.split("\n")[0].replace(/,/g, " ");
+        fullName = (text.split("\n")[0] || "").trim() || "Sin Nombre";
       }
       map.set(username, { username, fullName });
       added += 1;
@@ -883,7 +945,7 @@
         return;
       }
 
-      const fullName = lines.length > 1 ? lines[1].replace(/,/g, " ") : "Sin Nombre";
+      const fullName = lines.length > 1 ? (lines[1] || "").trim() || "Sin Nombre" : "Sin Nombre";
       map.set(username, { username, fullName });
       added += 1;
     });
@@ -960,6 +1022,7 @@
     );
 
     while (data.size < CONFIG.maxUsers) {
+      checkAbort();
       const startTop = container.scrollTop;
       const jump = Math.max(700, Math.floor((container.clientHeight || 600) * 0.8));
       // Micro-scroll en 3 pasos para no saltar filas virtualizadas.
@@ -999,7 +1062,11 @@
 
       const added = extractUsers(container, data, phase.key);
       setOverlay(profile, phase.key, data.size, `En curso (+${added})`, "#a2f3a6");
-      sendProgress(`${phase.key}: ${data.size} usuarios (+${added})`);
+      // Throttle logs cada 5 ciclos o si suma usuarios.
+      if (added > 0 || prevCount !== data.size || stagnant === 0) {
+        sendProgress(`${phase.key}: ${data.size} usuarios (+${added})`);
+      }
+      sendBadge(data.size > 999 ? `${Math.floor(data.size / 1000)}k` : String(data.size));
       prevVisible = currVisible;
 
       const countUnchanged = data.size === prevCount;
@@ -1068,7 +1135,7 @@
       ...rows.map((r) => `${escapeCsvValue(r.username)},${escapeCsvValue(r.fullName)},${ts}`),
     ].join("\n");
     const filename = `ig_auto_${toSafeFilePart(profile)}_${phase.key}_${Date.now()}.csv`;
-    downloadText(filename, csv, "text/csv;charset=utf-8;");
+    downloadText(filename, "﻿" + csv, "text/csv;charset=utf-8;");
     return { phase: phase.key, rows, filename, scrapeTimestamp: ts };
   }
 
@@ -1182,9 +1249,12 @@
       throw new Error("Abre Instagram en el perfil objetivo (ej: instagram.com/usuario/).");
     }
     running = true;
+    aborted = false;
+    activeProfile = getProfileFromPath();
+    sendBadge("RUN", "#1fa37d");
 
     try {
-      const profile = getProfileFromPath();
+      const profile = activeProfile;
       setOverlay(profile, "preparando", 0, "Iniciando analisis...", "#a2f3a6");
       sendProgress(`Perfil detectado: ${profile}`);
 
@@ -1260,17 +1330,42 @@
       }
 
       sendDone();
+      sendBadge("OK", "#16a34a");
     } catch (error) {
+      if (error instanceof AbortedError) {
+        setOverlay(getProfileFromPath(), "cancelado", 0, error.message, "#ffd166");
+        sendProgress(`Cancelado: ${error.message}`);
+        sendDone();
+        sendBadge("CXL", "#f59e0b");
+        return;
+      }
       setOverlay(getProfileFromPath(), "error", 0, `Error: ${error.message || "desconocido"}`, "#ff9a9a");
       sendError(error.message || "Error desconocido.");
+      sendBadge("ERR", "#ef4444");
       throw error;
     } finally {
       running = false;
+      activeProfile = null;
+      aborted = false;
     }
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (!msg || msg.type !== "START_ANALYSIS") return undefined;
+    if (!msg) return undefined;
+    if (msg.type === "CANCEL_ANALYSIS") {
+      if (running) {
+        aborted = true;
+        sendResponse({ ok: true });
+      } else {
+        sendResponse({ ok: false, error: "No hay analisis en curso." });
+      }
+      return true;
+    }
+    if (msg.type === "PING") {
+      sendResponse({ ok: true, running, profile: activeProfile });
+      return true;
+    }
+    if (msg.type !== "START_ANALYSIS") return undefined;
 
     runAnalysis()
       .then(() => sendResponse({ ok: true }))

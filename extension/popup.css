@@ -22,8 +22,35 @@ h1 {
   color: #3a4b57;
 }
 
+.tabStatus {
+  font-size: 11px;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #eaf5ee;
+  color: #1a5d3a;
+  border: 1px solid #c6e4cf;
+  display: none;
+}
+
+.tabStatus.warn {
+  background: #fff5e6;
+  color: #8a4b00;
+  border-color: #ffd9a8;
+  display: block;
+}
+
+.tabStatus.ok {
+  display: block;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
 button {
-  width: 100%;
+  flex: 1;
   border: 0;
   border-radius: 10px;
   padding: 10px 12px;
@@ -33,9 +60,13 @@ button {
   background: linear-gradient(120deg, #1177cc, #0d8f74);
 }
 
+button.secondary {
+  background: linear-gradient(120deg, #6b7280, #374151);
+}
+
 button:disabled {
   cursor: default;
-  opacity: 0.65;
+  opacity: 0.55;
 }
 
 #log {
