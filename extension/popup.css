@@ -3,50 +3,15 @@ body {
   font-family: "Segoe UI", Tahoma, sans-serif;
   background: linear-gradient(160deg, #f7fbff, #eef8f0);
   color: #1a2a33;
-  width: 360px;
+  width: 280px;
 }
 
 .app {
-  padding: 14px;
+  padding: 18px;
+  text-align: center;
 }
 
-h1 {
-  font-size: 18px;
-  margin: 0 0 8px;
-}
-
-.hint {
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 0 0 10px;
+.loading {
+  font-size: 13px;
   color: #3a4b57;
-}
-
-button {
-  width: 100%;
-  border: 0;
-  border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(120deg, #1177cc, #0d8f74);
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.65;
-}
-
-#log {
-  margin: 10px 0 0;
-  padding: 10px;
-  border-radius: 10px;
-  min-height: 120px;
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  background: #0b1b24;
-  color: #d3edf7;
-  font-size: 11px;
 }

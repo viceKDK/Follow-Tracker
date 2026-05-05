@@ -44,8 +44,11 @@ Archivos descargados:
 
 Notas:
 
+- Requiere **sesión activa de Instagram** en el mismo perfil de navegador (cookies `csrftoken`, `sessionid`, `ds_user_id`). Si no estás logueado, el modo API se salta y solo opera el UI fallback.
 - Mantén activa la pestaña de Instagram para máxima estabilidad.
 - Si cambias de pestaña puede ralentizarse la carga del modal.
+- La extensión usa primero el modo **API** (`/api/v1/friendships/...`) con backoff automático en 429/503 y luego cae a **UI** (modal o ruta `/usuario/followers/`) si falla.
+- Tolera incompletitud parcial: acepta listados ≥95% del total esperado y marca el resto como informativo (no aborta).
 
 ## Uso rápido (Windows EXE)
 
