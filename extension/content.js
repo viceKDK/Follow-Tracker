@@ -10,6 +10,10 @@
     continuityMinOverlap: 2,
     apiMaxAttempts: 3,
     apiRetryDelayMs: 1800,
+    apiPageSize: 100,
+    apiInterPageMs: 600,
+    apiMaxBackoffMs: 30000,
+    apiCompletenessRatio: 0.95,
   };
 
   const PHASES = [
@@ -121,12 +125,33 @@
   }
 
   function getApiHeaders() {
+    const claim = getCookie("ig_www_claim") || "0";
     return {
       "x-csrftoken": getCookie("csrftoken"),
       "x-ig-app-id": "936619743392459",
+      "x-asbd-id": "129477",
+      "x-ig-www-claim": claim,
       "x-requested-with": "XMLHttpRequest",
       accept: "*/*",
+      "accept-language": navigator.language || "es-ES,es;q=0.9,en;q=0.8",
     };
+  }
+
+  function ensureLoggedIn() {
+    const csrf = getCookie("csrftoken");
+    const ds = getCookie("ds_user_id");
+    const sid = getCookie("sessionid");
+    if (!csrf || !ds || !sid) {
+      throw new Error(
+        "No hay sesion activa de Instagram en este navegador. Inicia sesion en instagram.com y reintenta."
+      );
+    }
+    return { csrf, dsUserId: ds };
+  }
+
+  function buildRankToken(dsUserId) {
+    const seed = `${dsUserId || "anon"}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    return seed;
   }
 
   function storageGet(key) {
@@ -170,25 +195,65 @@
     return merged;
   }
 
-  async function igFetchJson(url) {
-    const res = await fetch(url, {
-      method: "GET",
-      credentials: "include",
-      headers: getApiHeaders(),
-    });
-    if (!res.ok) {
+  async function igFetchJson(url, opts) {
+    const referer = (opts && opts.referer) || `${location.origin}/`;
+    const maxAttempts = (opts && opts.maxAttempts) || 6;
+    let attempt = 0;
+    let lastErr = null;
+    while (attempt < maxAttempts) {
+      attempt += 1;
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "GET",
+          credentials: "include",
+          headers: { ...getApiHeaders(), referer },
+        });
+      } catch (netErr) {
+        lastErr = netErr;
+        const wait = Math.min(CONFIG.apiMaxBackoffMs, 800 * Math.pow(2, attempt - 1));
+        sendProgress(`Red caida (${netErr.message || "error"}), reintento ${attempt}/${maxAttempts} en ${wait}ms`);
+        await sleep(wait);
+        continue;
+      }
+      if (res.ok) {
+        try {
+          return await res.json();
+        } catch (parseErr) {
+          throw new Error(`API ${url}: respuesta no JSON (${parseErr.message || "parse error"}).`);
+        }
+      }
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(`API ${res.status}: sesion no autorizada para ${url}. Reabre instagram.com logueado.`);
+      }
+      if (res.status === 429 || res.status === 503 || res.status === 502 || res.status === 504) {
+        const retryAfterHeader = Number(res.headers.get("retry-after")) * 1000;
+        const base = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+          ? retryAfterHeader
+          : Math.min(CONFIG.apiMaxBackoffMs, 1500 * Math.pow(2, attempt - 1));
+        const jitter = Math.floor(Math.random() * 600);
+        const wait = base + jitter;
+        sendProgress(`API ${res.status} (rate limit), espera ${wait}ms, reintento ${attempt}/${maxAttempts}`);
+        await sleep(wait);
+        continue;
+      }
       throw new Error(`API ${res.status} en ${url}`);
     }
-    return res.json();
+    throw lastErr || new Error(`API agotada tras ${maxAttempts} reintentos: ${url}`);
   }
 
   async function getProfileInfoApi(username) {
     const url = `/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
-    const json = await igFetchJson(url);
+    const referer = `${location.origin}/${username}/`;
+    const json = await igFetchJson(url, { referer });
     const user = json && json.data && json.data.user;
     if (!user || !user.id) throw new Error("No se pudo obtener user_id via API.");
+    if (user.is_private && !user.followed_by_viewer) {
+      throw new Error("Cuenta privada y no la sigues: no se puede listar via API.");
+    }
     return {
       id: user.id,
+      isPrivate: !!user.is_private,
       followersCount: (user.edge_followed_by && user.edge_followed_by.count) || null,
       followingCount: (user.edge_follow && user.edge_follow.count) || null,
     };
@@ -201,19 +266,28 @@
     return { username, fullName };
   }
 
-  async function paginateFriendshipApi(userId, phaseKey, expectedCount) {
+  async function paginateFriendshipApi(userId, phaseKey, expectedCount, dsUserId, profile) {
     const out = [];
     const seen = new Set();
     let maxId = null;
     let page = 0;
+    let emptyStreak = 0;
+    const rankToken = buildRankToken(dsUserId);
+    const referer = `${location.origin}/${profile}/${phaseKey === "followers" ? "followers" : "following"}/`;
+    const endpoint = phaseKey === "followers" ? "followers" : "following";
+    const targetCap = Number.isFinite(expectedCount) && expectedCount > 0
+      ? Math.max(expectedCount + 200, Math.ceil(expectedCount * 1.05))
+      : CONFIG.maxUsers;
 
-    while (page < 300) {
-      const endpoint = phaseKey === "followers" ? "followers" : "following";
+    while (page < 600 && out.length < targetCap) {
       const qs = new URLSearchParams();
-      qs.set("count", "200");
-      if (maxId) qs.set("max_id", maxId);
+      qs.set("count", String(CONFIG.apiPageSize));
+      qs.set("rank_token", rankToken);
+      qs.set("search_surface", "follow_list_page");
+      if (maxId) qs.set("max_id", String(maxId));
       const url = `/api/v1/friendships/${userId}/${endpoint}/?${qs.toString()}`;
-      const json = await igFetchJson(url);
+
+      const json = await igFetchJson(url, { referer });
       const users = Array.isArray(json && json.users) ? json.users : [];
 
       let added = 0;
@@ -229,14 +303,29 @@
       page += 1;
       sendProgress(
         `${phaseKey} [API]: ${out.length} usuarios (+${added})` +
-          (expectedCount ? ` de ${expectedCount}` : "")
+          (expectedCount ? ` de ${expectedCount}` : "") +
+          ` p${page}`
       );
       setOverlay(getProfileFromPath(), `${phaseKey} api`, out.length, `Pagina ${page} (+${added})`, "#a2f3a6");
 
-      maxId = (json && (json.next_max_id || json.max_id)) || null;
-      const hasMore = !!(json && (json.big_list || json.has_next_page || maxId));
-      if (!hasMore || !maxId || users.length === 0) break;
-      await sleep(420);
+      const nextMax = json && (json.next_max_id || json.next_min_id);
+      const nextMaxStr = nextMax !== undefined && nextMax !== null && nextMax !== "" ? String(nextMax) : null;
+
+      if (added === 0 && (!users || users.length === 0)) {
+        emptyStreak += 1;
+      } else {
+        emptyStreak = 0;
+      }
+
+      // Fin de paginacion: la senal autoritativa es next_max_id ausente.
+      if (!nextMaxStr) break;
+      // Salvavidas: si IG devuelve la misma cursor varias veces sin sumar, cortamos.
+      if (nextMaxStr === maxId && added === 0) break;
+      if (emptyStreak >= 2) break;
+
+      maxId = nextMaxStr;
+      const jitter = Math.floor(Math.random() * 350);
+      await sleep(CONFIG.apiInterPageMs + jitter);
     }
 
     return out;
@@ -244,9 +333,16 @@
 
   function isCompleteEnough(actual, expected) {
     if (!Number.isFinite(expected) || expected <= 0) return true;
-    // Tolerancia chica por diferencias de privacidad/render temporal.
-    const minAllowed = Math.max(expected - 3, Math.floor(expected * 0.98));
-    return actual >= minAllowed;
+    // Tolerancia generosa: IG puede ocultar cuentas suspendidas/privadas o
+    // contar duplicados. Aceptamos >=95% sin abortar.
+    const minAllowed = Math.floor(expected * CONFIG.apiCompletenessRatio);
+    return actual >= Math.max(1, minAllowed);
+  }
+
+  function pctText(actual, expected) {
+    if (!Number.isFinite(expected) || expected <= 0) return `${actual}`;
+    const pct = Math.round((actual / expected) * 100);
+    return `${actual}/${expected} (${pct}%)`;
   }
 
   function buildCsvFromRows(rows, scrapeTime) {
@@ -258,26 +354,73 @@
 
   async function runApiMode(profile) {
     sendProgress("Intentando modo API...");
+    const session = ensureLoggedIn();
     const info = await getProfileInfoApi(profile);
     sendProgress(
       `API profile ok: user_id=${info.id}, followers=${info.followersCount || "?"}, following=${info.followingCount || "?"}`
     );
 
-    const followersRowsRaw = await paginateFriendshipApi(info.id, "followers", info.followersCount);
-    const followingRowsRaw = await paginateFriendshipApi(info.id, "following", info.followingCount);
+    const followersRowsRaw = await paginateFriendshipApi(
+      info.id,
+      "followers",
+      info.followersCount,
+      session.dsUserId,
+      profile
+    );
+    const followingRowsRaw = await paginateFriendshipApi(
+      info.id,
+      "following",
+      info.followingCount,
+      session.dsUserId,
+      profile
+    );
     const followersRows = await mergeWithProfileCache(profile, "followers", followersRowsRaw);
     const followingRows = await mergeWithProfileCache(profile, "following", followingRowsRaw);
     if (followersRows.length === 0 && followingRows.length === 0) {
       throw new Error("API devolvio 0 usuarios en ambas listas.");
     }
-    if (!isCompleteEnough(followersRows.length, info.followersCount)) {
-      throw new Error(
-        `API followers incompleto (${followersRows.length}/${info.followersCount}).`
+
+    const followersOk = isCompleteEnough(followersRows.length, info.followersCount);
+    const followingOk = isCompleteEnough(followingRows.length, info.followingCount);
+    sendProgress(`Followers ${pctText(followersRows.length, info.followersCount)}`);
+    sendProgress(`Following ${pctText(followingRows.length, info.followingCount)}`);
+
+    // Si una de las dos quedo claramente bajo el umbral, intentamos un repechaje
+    // antes de aceptar el resultado parcial.
+    if (!followersOk && Number.isFinite(info.followersCount) && info.followersCount > 0) {
+      sendProgress(`Followers parcial (<${Math.round(CONFIG.apiCompletenessRatio * 100)}%), repechaje API...`);
+      const retry = await paginateFriendshipApi(
+        info.id,
+        "followers",
+        info.followersCount,
+        session.dsUserId,
+        profile
       );
+      const merged = await mergeWithProfileCache(profile, "followers", retry);
+      followersRows.length = 0;
+      Array.prototype.push.apply(followersRows, merged);
+      sendProgress(`Repechaje followers ${pctText(followersRows.length, info.followersCount)}`);
     }
-    if (!isCompleteEnough(followingRows.length, info.followingCount)) {
+    if (!followingOk && Number.isFinite(info.followingCount) && info.followingCount > 0) {
+      sendProgress(`Following parcial (<${Math.round(CONFIG.apiCompletenessRatio * 100)}%), repechaje API...`);
+      const retry = await paginateFriendshipApi(
+        info.id,
+        "following",
+        info.followingCount,
+        session.dsUserId,
+        profile
+      );
+      const merged = await mergeWithProfileCache(profile, "following", retry);
+      followingRows.length = 0;
+      Array.prototype.push.apply(followingRows, merged);
+      sendProgress(`Repechaje following ${pctText(followingRows.length, info.followingCount)}`);
+    }
+
+    // Solo abortamos si ambas estan absurdamente bajas (<50%) — ahi conviene el UI fallback.
+    const half = (a, e) => Number.isFinite(e) && e > 0 && a < Math.floor(e * 0.5);
+    if (half(followersRows.length, info.followersCount) && half(followingRows.length, info.followingCount)) {
       throw new Error(
-        `API following incompleto (${followingRows.length}/${info.followingCount}).`
+        `API muy incompleto en ambas listas (${followersRows.length}/${info.followersCount} y ${followingRows.length}/${info.followingCount}). Cayendo a UI.`
       );
     }
 
@@ -457,53 +600,125 @@
 
   function getExpectedCountFromTrigger(trigger) {
     if (!trigger) return null;
+    // 1) atributo title="N" (Instagram lo usa para el numero exacto)
+    const titleEl = trigger.querySelector("span[title], [title]");
+    if (titleEl) {
+      const titleVal = titleEl.getAttribute("title");
+      const fromTitle = parseCountFromText(titleVal);
+      if (fromTitle) return fromTitle;
+    }
+    if (trigger.getAttribute && trigger.getAttribute("title")) {
+      const fromOwnTitle = parseCountFromText(trigger.getAttribute("title"));
+      if (fromOwnTitle) return fromOwnTitle;
+    }
+    // 2) primer span con numero como texto directo (no concatenado con etiquetas hermanas)
+    const spans = trigger.querySelectorAll("span");
+    for (const sp of spans) {
+      const direct = sp.childNodes && Array.from(sp.childNodes)
+        .filter((n) => n.nodeType === 3)
+        .map((n) => n.textContent || "")
+        .join("");
+      const n = parseCountFromText(direct);
+      if (n) return n;
+    }
+    // 3) texto propio del trigger (sin descender a hermanos del contenedor)
     const ownText = parseCountFromText(trigger.textContent || "");
     if (ownText) return ownText;
-    const row = trigger.closest("li, section, div, header");
-    if (row) {
-      const rowText = parseCountFromText(row.textContent || "");
-      if (rowText) return rowText;
-    }
     return null;
+  }
+
+  function isModalRouteOpen(phaseKey) {
+    const path = window.location.pathname.toLowerCase();
+    return path.includes(`/${phaseKey}/`);
+  }
+
+  function getRouteScope(phaseKey) {
+    // En el caso "modal como ruta" (no hay role=dialog), el listado se renderiza
+    // dentro de un contenedor del main. Devolvemos el mejor scope disponible.
+    const scope =
+      document.querySelector('div[role="dialog"]') ||
+      document.querySelector("main section") ||
+      document.querySelector("main") ||
+      document.body;
+    return scope;
   }
 
   async function openDialogForPhase(phase) {
     const trigger = findPhaseTrigger(phase);
-    if (!trigger) throw new Error(`No se encontro acceso a ${phase.key}.`);
     const expectedCount = getExpectedCountFromTrigger(trigger);
-    trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-    const ok = await waitFor(() => !!document.querySelector('div[role="dialog"]'), 9000);
-    if (!ok) throw new Error(`No se abrio el dialogo de ${phase.key}.`);
-    // Si abre otro dialogo distinto, intentamos clickear el contenedor padre del trigger.
-    const hasAnyListAnchor = !!document.querySelector(
-      'div[role="dialog"] a[href^="/"], div[role="dialog"] a[href*="instagram.com/"]'
-    );
-    if (!hasAnyListAnchor && trigger.parentElement) {
-      trigger.parentElement.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-      await waitFor(
-        () =>
-          !!document.querySelector(
-            'div[role="dialog"] a[href^="/"], div[role="dialog"] a[href*="instagram.com/"]'
-          ),
-        5000
-      );
+
+    // Camino preferido: click en el trigger y esperar role=dialog.
+    if (trigger) {
+      trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+      const okDialog = await waitFor(() => !!document.querySelector('div[role="dialog"]'), 9000);
+      if (okDialog) {
+        const hasAnyListAnchor = !!document.querySelector(
+          'div[role="dialog"] a[href^="/"], div[role="dialog"] a[href*="instagram.com/"]'
+        );
+        if (!hasAnyListAnchor && trigger.parentElement) {
+          trigger.parentElement.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+          await waitFor(
+            () => !!document.querySelector(
+              'div[role="dialog"] a[href^="/"], div[role="dialog"] a[href*="instagram.com/"]'
+            ),
+            5000
+          );
+        }
+        return { expectedCount, mode: "dialog" };
+      }
     }
-    return { expectedCount };
+
+    // Fallback: abrir como ruta (history.pushState). IG soporta /usuario/followers/.
+    const profile = getProfileFromPath();
+    const targetPath = `/${profile}/${phase.key}/`;
+    sendProgress(`No abrio role=dialog, intentando ruta ${targetPath}`);
+    try {
+      history.pushState({}, "", targetPath);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    } catch (_e) {
+      window.location.href = targetPath;
+    }
+    const okRoute = await waitFor(() => {
+      if (document.querySelector('div[role="dialog"]')) return true;
+      const scope = getRouteScope(phase.key);
+      const anchors = scope ? scope.querySelectorAll('a[href^="/"]').length : 0;
+      return isModalRouteOpen(phase.key) && anchors > 5;
+    }, 12000);
+    if (!okRoute) throw new Error(`No se abrio el listado de ${phase.key} (ni dialog ni ruta).`);
+    return {
+      expectedCount,
+      mode: document.querySelector('div[role="dialog"]') ? "dialog" : "route",
+    };
   }
 
   async function closeDialog() {
-    const closeBtn =
-      document.querySelector('div[role="dialog"] button[aria-label="Cerrar"]') ||
-      document.querySelector('div[role="dialog"] button[aria-label="Close"]') ||
-      document.querySelector('div[role="dialog"] svg[aria-label="Cerrar"]') ||
-      document.querySelector('div[role="dialog"] svg[aria-label="Close"]');
-    if (closeBtn) {
-      closeBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
-      await waitFor(() => !document.querySelector('div[role="dialog"]'), 3000);
-      return;
+    const dialog = document.querySelector('div[role="dialog"]');
+    if (dialog) {
+      const closeBtn =
+        dialog.querySelector('button[aria-label="Cerrar"]') ||
+        dialog.querySelector('button[aria-label="Close"]') ||
+        dialog.querySelector('svg[aria-label="Cerrar"]') ||
+        dialog.querySelector('svg[aria-label="Close"]');
+      if (closeBtn) {
+        closeBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+        await waitFor(() => !document.querySelector('div[role="dialog"]'), 3000);
+      } else {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await waitFor(() => !document.querySelector('div[role="dialog"]'), 3000);
+      }
     }
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await waitFor(() => !document.querySelector('div[role="dialog"]'), 3000);
+    // Si estamos en /usuario/followers/ o /usuario/following/ volver al perfil.
+    const path = window.location.pathname.toLowerCase();
+    if (/\/(followers|following)\/?$/.test(path)) {
+      const profile = getProfileFromPath();
+      try {
+        history.pushState({}, "", `/${profile}/`);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      } catch (_e) {
+        // ignorar
+      }
+      await sleep(600);
+    }
   }
 
   function isLikelyScrollable(el) {
@@ -531,17 +746,30 @@
     return changed;
   }
 
-  function getScrollableCandidates() {
+  function getActiveScope(phaseKey) {
     const dialog = document.querySelector('div[role="dialog"]');
-    if (!dialog) throw new Error("No hay dialogo abierto.");
+    if (dialog) return { scope: dialog, kind: "dialog" };
+    const route = getRouteScope(phaseKey);
+    if (route) return { scope: route, kind: "route" };
+    throw new Error("No hay dialogo ni ruta abiertos.");
+  }
 
-    const selectors = [
+  function getScrollableCandidates(phaseKey) {
+    const { scope, kind } = getActiveScope(phaseKey);
+
+    const dialogSelectors = [
       'div[role="dialog"] ._aano',
       'div[role="dialog"] div[style*="overflow"]',
       'div[role="dialog"] div[class*="scroll"]',
       'div[role="dialog"] [role="dialog"]',
       'div[role="dialog"] > div > div',
     ];
+    const routeSelectors = [
+      "main div[style*='overflow']",
+      "main div[class*='scroll']",
+      "main section",
+    ];
+    const selectors = kind === "dialog" ? dialogSelectors : routeSelectors;
 
     const seen = new Set();
     const candidates = [];
@@ -555,23 +783,25 @@
       }
     }
 
-    for (const el of dialog.querySelectorAll("div")) {
+    for (const el of scope.querySelectorAll("div")) {
       if (seen.has(el)) continue;
       if (!isLikelyScrollable(el)) continue;
       seen.add(el);
       candidates.push(el);
     }
 
+    // Si nada califica, usamos el scope mismo y window como ultimo recurso.
     if (candidates.length === 0) {
-      throw new Error("No se encontraron candidatos de scroll.");
+      candidates.push(scope);
+      candidates.push(document.scrollingElement || document.documentElement);
     }
 
     candidates.sort((a, b) => scoreContainer(b) - scoreContainer(a));
     return candidates;
   }
 
-  function findScrollableContainer() {
-    const candidates = getScrollableCandidates();
+  function findScrollableContainer(phaseKey) {
+    const candidates = getScrollableCandidates(phaseKey);
     for (const el of candidates) {
       if (canScrollElement(el)) {
         return el;
@@ -580,8 +810,11 @@
     return candidates[0];
   }
 
-  function extractUsers(container, map) {
-    const dialog = document.querySelector('div[role="dialog"]') || container;
+  function extractUsers(container, map, phaseKey) {
+    const dialog =
+      document.querySelector('div[role="dialog"]') ||
+      (phaseKey ? getRouteScope(phaseKey) : null) ||
+      container;
     const links = dialog.querySelectorAll("a[href]");
     let added = 0;
 
@@ -622,8 +855,9 @@
       added += 1;
     });
 
-    // 2) Escaneo 1x1 por filas visibles (fallback para virtualización sin href estable).
+    // 2) Escaneo 1x1 por filas visibles (fallback para virtualizacion sin href estable).
     const rows = dialog.querySelectorAll("li, div[role='button'], div[role='listitem']");
+    void phaseKey;
     rows.forEach((row) => {
       if (!(row instanceof HTMLElement)) return;
       const text = (row.innerText || "").trim();
@@ -663,7 +897,7 @@
     let totalAdded = 0;
     container.scrollTop = 0;
     await sleep(700);
-    totalAdded += extractUsers(container, map);
+    totalAdded += extractUsers(container, map, phaseKey);
 
     const step = Math.max(180, Math.floor(container.clientHeight * 0.35));
     let guard = 0;
@@ -672,7 +906,7 @@
       container.scrollTop = Math.min(container.scrollTop + step, container.scrollHeight);
       container.dispatchEvent(new WheelEvent("wheel", { deltaY: step, bubbles: true }));
       await sleep(320);
-      totalAdded += extractUsers(container, map);
+      totalAdded += extractUsers(container, map, phaseKey);
       if (container.scrollTop === before) break;
       guard += 1;
     }
@@ -687,7 +921,7 @@
     for (let p = 1; p <= passes; p += 1) {
       container.scrollTop = 0;
       await sleep(900);
-      totalAdded += extractUsers(container, map);
+      totalAdded += extractUsers(container, map, phaseKey);
 
       const step = Math.max(120, Math.floor(container.clientHeight * 0.22));
       let guard = 0;
@@ -696,7 +930,7 @@
         container.scrollTop = Math.min(container.scrollTop + step, container.scrollHeight);
         container.dispatchEvent(new WheelEvent("wheel", { deltaY: step, bubbles: true }));
         await sleep(420);
-        totalAdded += extractUsers(container, map);
+        totalAdded += extractUsers(container, map, phaseKey);
         if (container.scrollTop === before) break;
         guard += 1;
       }
@@ -707,17 +941,19 @@
 
   async function scrapeCurrentDialog(phase, profile, expectedCount) {
     const data = new Map();
-    let candidates = getScrollableCandidates();
+    let candidates = getScrollableCandidates(phase.key);
     let activeIndex = 0;
-    let container = candidates[activeIndex] || findScrollableContainer();
+    let container = candidates[activeIndex] || findScrollableContainer(phase.key);
     let stagnant = 0;
     let prevCount = 0;
     let recoveries = 0;
-    let prevVisible = collectVisibleUsernames(document.querySelector('div[role="dialog"]') || container);
+    const initialScope =
+      document.querySelector('div[role="dialog"]') || getRouteScope(phase.key) || container;
+    let prevVisible = collectVisibleUsernames(initialScope);
 
     // Toma inicial de elementos visibles antes de empezar a mover.
-    extractUsers(container, data);
-    const initialAnchors = (document.querySelector('div[role="dialog"]') || container).querySelectorAll("a[href]").length;
+    extractUsers(container, data, phase.key);
+    const initialAnchors = initialScope.querySelectorAll("a[href]").length;
     setOverlay(profile, phase.key, data.size, "Recolectando...", "#a2f3a6");
     sendProgress(
       `${phase.key}: ${data.size} usuarios (inicio, anchors=${initialAnchors}, esperado=${expectedCount || "?"})`
@@ -725,38 +961,43 @@
 
     while (data.size < CONFIG.maxUsers) {
       const startTop = container.scrollTop;
-      const jump = Math.max(700, Math.floor(container.clientHeight * 0.8));
+      const jump = Math.max(700, Math.floor((container.clientHeight || 600) * 0.8));
       // Micro-scroll en 3 pasos para no saltar filas virtualizadas.
       for (let i = 0; i < 3; i += 1) {
         const mini = Math.floor(jump / 3);
         container.scrollTop = Math.min(container.scrollTop + mini, container.scrollHeight);
-        container.scrollBy(0, mini);
+        if (typeof container.scrollBy === "function") container.scrollBy(0, mini);
         container.dispatchEvent(new WheelEvent("wheel", { deltaY: mini, bubbles: true }));
         await sleep(180);
       }
       if (container.scrollTop === startTop) {
         container.scrollTop = startTop + jump;
+        // Si seguimos sin movernos (window scrolling), forzar window.scrollBy.
+        if (container.scrollTop === startTop) {
+          window.scrollBy(0, jump);
+        }
       }
       await randomSleep();
 
-      const currVisible = collectVisibleUsernames(document.querySelector('div[role="dialog"]') || container);
+      const liveScope =
+        document.querySelector('div[role="dialog"]') || getRouteScope(phase.key) || container;
+      const currVisible = collectVisibleUsernames(liveScope);
       const overlap = continuityOverlap(prevVisible, currVisible);
       if (prevVisible.length > 0 && currVisible.length > 0 && overlap < CONFIG.continuityMinOverlap) {
         sendProgress(
           `${phase.key}: continuidad baja (${overlap}/${CONFIG.continuityTail}), aplicando scroll correctivo`
         );
-        // Correccion: retroceder un poco y avanzar con paso menor para no saltar usuarios.
-        container.scrollTop = Math.max(0, container.scrollTop - Math.floor(container.clientHeight * 0.6));
+        container.scrollTop = Math.max(0, container.scrollTop - Math.floor((container.clientHeight || 600) * 0.6));
         await sleep(700);
-        const mini = Math.max(160, Math.floor(container.clientHeight * 0.25));
+        const mini = Math.max(160, Math.floor((container.clientHeight || 600) * 0.25));
         for (let k = 0; k < 3; k += 1) {
           container.scrollTop = Math.min(container.scrollTop + mini, container.scrollHeight);
           await sleep(260);
-          extractUsers(container, data);
+          extractUsers(container, data, phase.key);
         }
       }
 
-      const added = extractUsers(container, data);
+      const added = extractUsers(container, data, phase.key);
       setOverlay(profile, phase.key, data.size, `En curso (+${added})`, "#a2f3a6");
       sendProgress(`${phase.key}: ${data.size} usuarios (+${added})`);
       prevVisible = currVisible;
@@ -772,16 +1013,14 @@
             sendProgress(
               `${phase.key}: atascado en ${data.size}/${expectedCount}, intento recuperacion ${recoveries}/4`
             );
-            // Recuperacion: subir bastante, esperar, bajar al fondo y esperar carga.
-            container.scrollTop = Math.max(0, container.scrollTop - container.clientHeight * 4);
+            container.scrollTop = Math.max(0, container.scrollTop - (container.clientHeight || 600) * 4);
             await sleep(1200 + recoveries * 400);
             container.scrollTop = container.scrollHeight;
             container.dispatchEvent(new WheelEvent("wheel", { deltaY: 1800, bubbles: true }));
             await sleep(3000 + recoveries * 800);
             await slowSweep(container, data, phase.key);
 
-            // Fallback: probar otros contenedores de scroll del modal.
-            candidates = getScrollableCandidates();
+            candidates = getScrollableCandidates(phase.key);
             let switched = false;
             for (let idx = 0; idx < candidates.length; idx += 1) {
               if (idx === activeIndex) continue;
@@ -800,13 +1039,11 @@
               }
             }
             if (!switched) {
-              // Espera extra antes de volver al loop, para permitir carga lazy.
               await sleep(1800 + recoveries * 600);
             }
             stagnant = 0;
             continue;
           }
-          // Ultimo intento antes de cerrar fase: reescaneo profundo completo.
           if (clearlyIncomplete) {
             sendProgress(`${phase.key}: ejecutando deep-rescan final (${data.size}/${expectedCount})`);
             await deepRescan(container, data, phase.key);
@@ -950,6 +1187,14 @@
       const profile = getProfileFromPath();
       setOverlay(profile, "preparando", 0, "Iniciando analisis...", "#a2f3a6");
       sendProgress(`Perfil detectado: ${profile}`);
+
+      try {
+        ensureLoggedIn();
+        sendProgress("Sesion de Instagram detectada.");
+      } catch (sessionErr) {
+        // No abortamos: el modo UI puede funcionar leyendo el DOM aun con sesion debil.
+        sendProgress(`Aviso sesion: ${sessionErr.message}`);
+      }
 
       let usedApi = false;
       let lastApiError = null;
