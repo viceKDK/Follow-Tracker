@@ -66,6 +66,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "ENSURE_OVERLAY") {
+    ensureContentLoaded(msg.tabId)
+      .then((response) => sendResponse(response))
+      .catch((error) => sendResponse({ ok: false, error: error.message || "Error." }));
+    return true;
+  }
+
   if (msg.source === "content") {
     const tabId = sender && sender.tab && sender.tab.id;
     if (msg.type === "badge" && tabId) {

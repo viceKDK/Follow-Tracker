@@ -43,44 +43,153 @@
     }
   }
 
+  function injectOverlayStyles() {
+    if (document.getElementById("ft-auto-overlay-style")) return;
+    const style = document.createElement("style");
+    style.id = "ft-auto-overlay-style";
+    style.textContent = `
+      #ft-auto-overlay {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 2147483647;
+        width: 320px;
+        background: linear-gradient(160deg, #f7fbff, #eef8f0);
+        color: #1a2a33;
+        border-radius: 14px;
+        padding: 0;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        box-shadow: 0 18px 40px rgba(15, 30, 45, 0.22), 0 2px 6px rgba(0,0,0,.08);
+        overflow: hidden;
+        border: 1px solid rgba(15, 60, 80, 0.08);
+      }
+      #ft-auto-overlay .ft-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px 8px;
+        background: linear-gradient(120deg, #1177cc, #0d8f74);
+        color: #fff;
+      }
+      #ft-auto-overlay .ft-title {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: .2px;
+      }
+      #ft-auto-overlay .ft-icon-btn {
+        border: none;
+        background: rgba(255,255,255,.18);
+        color: #fff;
+        border-radius: 6px;
+        padding: 2px 8px;
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        margin-left: 4px;
+        transition: background .15s ease;
+      }
+      #ft-auto-overlay .ft-icon-btn:hover { background: rgba(255,255,255,.32); }
+      #ft-auto-overlay .ft-body {
+        padding: 12px 14px 14px;
+      }
+      #ft-auto-overlay .ft-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        margin-bottom: 4px;
+        color: #3a4b57;
+      }
+      #ft-auto-overlay .ft-row b {
+        color: #0d3d4f;
+        font-weight: 600;
+        max-width: 60%;
+        text-align: right;
+        word-break: break-all;
+      }
+      #ft-auto-overlay .ft-status {
+        font-size: 12px;
+        margin: 6px 0 4px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: #eaf5ee;
+        color: #1a5d3a;
+        border: 1px solid #c6e4cf;
+      }
+      #ft-auto-overlay .ft-status.warn { background:#fff5e6; color:#8a4b00; border-color:#ffd9a8; }
+      #ft-auto-overlay .ft-status.err { background:#ffecec; color:#a60000; border-color:#ffc4c4; }
+      #ft-auto-overlay .ft-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      #ft-auto-overlay .ft-btn {
+        flex: 1;
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        cursor: pointer;
+        font-weight: 700;
+        color: #fff;
+        font-size: 12px;
+        font-family: inherit;
+        transition: transform .08s ease, opacity .15s ease;
+      }
+      #ft-auto-overlay .ft-btn-primary {
+        background: linear-gradient(120deg, #1177cc, #0d8f74);
+      }
+      #ft-auto-overlay .ft-btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
+      #ft-auto-overlay .ft-btn-secondary {
+        background: linear-gradient(120deg, #6b7280, #374151);
+      }
+      #ft-auto-overlay .ft-btn-danger {
+        background: linear-gradient(120deg, #dc2626, #991b1b);
+      }
+      #ft-auto-overlay .ft-btn:disabled { cursor: default; opacity: .55; transform: none; }
+      #ft-auto-overlay .ft-log {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 10px;
+        max-height: 180px;
+        overflow: auto;
+        white-space: pre-wrap;
+        background: #0b1b24;
+        color: #d3edf7;
+        font-size: 11px;
+        line-height: 1.45;
+        font-family: Consolas, "Courier New", monospace;
+      }
+      #ft-auto-overlay .ft-log::-webkit-scrollbar { width: 6px; }
+      #ft-auto-overlay .ft-log::-webkit-scrollbar-thumb { background: #2a4756; border-radius: 3px; }
+      #ft-auto-overlay.ft-min .ft-body { display: none; }
+    `;
+    document.head.appendChild(style);
+  }
+
   function ensureOverlay() {
     if (overlay && document.body.contains(overlay)) return overlay;
     const old = document.getElementById("ft-auto-overlay");
     if (old) old.remove();
+    injectOverlayStyles();
     overlay = document.createElement("div");
     overlay.id = "ft-auto-overlay";
-    overlay.style.cssText = [
-      "position:fixed",
-      "top:20px",
-      "right:20px",
-      "z-index:2147483647",
-      "width:340px",
-      "background:rgba(10,18,28,.94)",
-      "color:#d9f2ff",
-      "border:2px solid #1fa37d",
-      "border-radius:12px",
-      "padding:10px",
-      "font-family:Segoe UI,Arial,sans-serif",
-      "box-shadow:0 10px 24px rgba(0,0,0,.35)",
-    ].join(";");
     overlay.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <div style="font-size:14px;font-weight:700;color:#7de8c6;">Follow Tracker Auto</div>
-        <div style="display:flex;gap:4px;">
-          <button id="ft-min" title="Minimizar" style="border:none;background:#374151;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;">_</button>
-          <button id="ft-close" title="Cerrar" style="border:none;background:#ef4444;color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:12px;">X</button>
+      <div class="ft-header">
+        <div class="ft-title">Follow Tracker Auto</div>
+        <div>
+          <button id="ft-min" class="ft-icon-btn" title="Minimizar">_</button>
+          <button id="ft-close" class="ft-icon-btn" title="Cerrar">×</button>
         </div>
       </div>
-      <div id="ft-body">
-        <div style="font-size:12px;margin-bottom:4px;">Perfil: <span id="ft-profile">-</span></div>
-        <div style="font-size:12px;margin-bottom:4px;">Fase: <span id="ft-phase">-</span></div>
-        <div style="font-size:12px;margin-bottom:4px;">Usuarios: <span id="ft-count">0</span></div>
-        <div id="ft-status" style="font-size:12px;color:#a2f3a6;">Listo. Pulsa Iniciar.</div>
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button id="ft-start" style="flex:1;border:none;background:linear-gradient(120deg,#1177cc,#0d8f74);color:#fff;border-radius:8px;padding:8px;cursor:pointer;font-weight:700;font-size:12px;">Iniciar analisis</button>
-          <button id="ft-cancel" disabled style="flex:1;border:none;background:#6b7280;color:#fff;border-radius:8px;padding:8px;cursor:pointer;font-weight:700;font-size:12px;opacity:.5;">Cancelar</button>
+      <div class="ft-body">
+        <div class="ft-row"><span>Perfil</span><b id="ft-profile">-</b></div>
+        <div class="ft-row"><span>Fase</span><b id="ft-phase">-</b></div>
+        <div class="ft-row"><span>Usuarios</span><b id="ft-count">0</b></div>
+        <div id="ft-status" class="ft-status">Listo. Pulsa Iniciar.</div>
+        <div class="ft-actions">
+          <button id="ft-start" class="ft-btn ft-btn-primary">Iniciar analisis</button>
+          <button id="ft-cancel" class="ft-btn ft-btn-secondary" disabled>Cancelar</button>
         </div>
-        <div id="ft-log" style="margin-top:8px;max-height:140px;overflow:auto;background:rgba(255,255,255,.05);padding:6px;border-radius:8px;font-size:11px;line-height:1.35;font-family:Consolas,monospace;"></div>
+        <div id="ft-log" class="ft-log"></div>
       </div>
     `;
     overlay.querySelector("#ft-close").addEventListener("click", () => {
@@ -88,8 +197,7 @@
       overlay = null;
     });
     overlay.querySelector("#ft-min").addEventListener("click", () => {
-      const body = overlay.querySelector("#ft-body");
-      body.style.display = body.style.display === "none" ? "block" : "none";
+      overlay.classList.toggle("ft-min");
     });
     overlay.querySelector("#ft-start").addEventListener("click", () => {
       if (running) return;
@@ -108,15 +216,12 @@
     const cancel = overlay.querySelector("#ft-cancel");
     if (start) {
       start.disabled = isBusy;
-      start.style.opacity = isBusy ? "0.5" : "1";
       start.textContent = isBusy ? "Ejecutando..." : "Iniciar analisis";
     }
     if (cancel) {
       cancel.disabled = !isBusy;
-      cancel.style.opacity = isBusy ? "1" : "0.5";
-      cancel.style.background = isBusy
-        ? "linear-gradient(120deg,#dc2626,#991b1b)"
-        : "#6b7280";
+      cancel.classList.remove("ft-btn-secondary", "ft-btn-danger");
+      cancel.classList.add(isBusy ? "ft-btn-danger" : "ft-btn-secondary");
     }
   }
 
@@ -127,7 +232,13 @@
     box.querySelector("#ft-count").textContent = String(count ?? 0);
     const st = box.querySelector("#ft-status");
     st.textContent = status || "";
-    if (color) st.style.color = color;
+    st.classList.remove("warn", "err");
+    // Heuristica: si el color de entrada es rojo/naranja, marca clase.
+    if (color === "#ff9a9a" || color === "#ef4444" || color === "#f87171") {
+      st.classList.add("err");
+    } else if (color === "#ffd166" || color === "#f59e0b") {
+      st.classList.add("warn");
+    }
   }
 
   function appendOverlayLog(text) {

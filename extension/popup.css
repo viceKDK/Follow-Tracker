@@ -3,76 +3,15 @@ body {
   font-family: "Segoe UI", Tahoma, sans-serif;
   background: linear-gradient(160deg, #f7fbff, #eef8f0);
   color: #1a2a33;
-  width: 360px;
+  width: 280px;
 }
 
 .app {
-  padding: 14px;
-}
-
-h1 {
-  font-size: 18px;
-  margin: 0 0 8px;
-}
-
-.hint {
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 0 0 10px;
-  color: #3a4b57;
-}
-
-.tabStatus {
-  font-size: 11px;
-  margin: 0 0 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: #eaf5ee;
-  color: #1a5d3a;
-  border: 1px solid #c6e4cf;
-  display: none;
-}
-
-.tabStatus.warn {
-  background: #fff5e6;
-  color: #8a4b00;
-  border-color: #ffd9a8;
-  display: block;
-}
-
-.tabStatus.ok {
-  display: block;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-}
-
-button {
-  flex: 1;
-  border: 0;
-  border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(120deg, #1177cc, #0d8f74);
-}
-
-button.secondary {
-  background: linear-gradient(120deg, #6b7280, #374151);
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.footer {
-  margin: 10px 0 0;
-  font-size: 10px;
-  color: #6b7280;
-  line-height: 1.4;
+  padding: 18px;
   text-align: center;
+}
+
+.loading {
+  font-size: 13px;
+  color: #3a4b57;
 }
