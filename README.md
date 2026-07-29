@@ -59,8 +59,48 @@ Notas:
 - Requiere **sesión activa de Instagram** en el mismo perfil de navegador (cookies `csrftoken`, `sessionid`, `ds_user_id`). Si no estás logueado, el modo API se salta y solo opera el UI fallback.
 - Mantén activa la pestaña de Instagram para máxima estabilidad.
 - Si cambias de pestaña puede ralentizarse la carga del modal.
-- La extensión usa primero el modo **API** (`/api/v1/friendships/...`) con backoff automático en 429/503 y luego cae a **UI** (modal o ruta `/usuario/followers/`) si falla.
-- Tolera incompletitud parcial: acepta listados ≥95% del total esperado y marca el resto como informativo (no aborta).
+- La extensión intenta primero el modo **API** (`/api/v1/friendships/...`). Si Instagram responde con errores `429`/`503`, espera y reintenta automáticamente. Si la API falla o devuelve demasiado poco, cambia al modo **UI** (modal o ruta `/usuario/followers/`) y comienza un nuevo recorrido de las listas.
+- Cuando se ejecutan primero los reintentos de API y después el recorrido por UI, el análisis puede demorar considerablemente más porque se utilizaron ambos métodos.
+- El objetivo es obtener la mayor cobertura posible, pero no se garantiza siempre el 100%: Instagram puede mostrar un contador diferente de la cantidad de usuarios que realmente entrega. La extensión informa esa diferencia y conserva los usuarios obtenidos.
+
+### Rendimiento y tiempo de espera
+
+Cuantos más seguidores y seguidos tenga el perfil, más tiempo demorará el análisis. La extensión debe recorrer las dos listas completas, por lo que el tiempo depende de la suma de ambas.
+
+- El modo **API** normalmente es el más rápido y procesa los usuarios por páginas.
+- El modo **UI** necesita abrir las listas y desplazarse progresivamente, por lo que puede demorar bastante más.
+- Una conexión lenta, los límites temporales de Instagram (`429`/`503`), los reintentos y una pestaña en segundo plano también aumentan el tiempo.
+- No cierres la pestaña ni cambies de perfil mientras el análisis esté en curso.
+- No existe un tiempo fijo garantizado: dos cuentas con cantidades similares pueden demorar diferente.
+
+Para obtener tiempos reales conviene probar perfiles de distintos tamaños. Una matriz inicial recomendada es:
+
+| Caso | Seguidores aproximados | Seguidos aproximados | Objetivo |
+|------|-------------------------|----------------------|----------|
+| Pequeño | 1.000 (1K) | 500 | Medir el funcionamiento normal con API y UI |
+| Mediano | 10.000 (10K) | 1.000 | Medir una extracción larga y el límite actual del modo UI |
+| Muchos seguidos | 10.000 (10K) | 7.500 | Comprobar el efecto de recorrer una segunda lista grande |
+| Estrés | 100.000 (100K) | 1.000 | Evaluar límites, memoria, bloqueos y respuestas de Instagram |
+
+Estimaciones iniciales de duración (todavía no verificadas mediante pruebas controladas):
+
+| Tamaño aproximado | Tiempo estimado por API | Tiempo estimado por UI |
+|-------------------|-------------------------|------------------------|
+| 1K seguidores | 20–60 segundos | 5–15 minutos |
+| 10K seguidores | 2–5 minutos | 20–60 minutos |
+| 100K seguidores | 45–90 minutos o más | No recomendable |
+
+> Estos tiempos son orientativos, no resultados medidos. Pueden cambiar considerablemente según la cantidad de seguidos, la conexión, la velocidad de respuesta de Instagram, los reintentos y los bloqueos temporales. Para publicar tiempos confiables se debe ejecutar cada caso varias veces y calcular un promedio.
+
+Registrar el resultado de cada ejecución:
+
+| Perfil probado | Seguidores | Seguidos | Método usado | Duración | Reintentos | Usuarios obtenidos | Resultado |
+|-----------------|------------|----------|--------------|----------|------------|--------------------|-----------|
+|                 |            |          | API / UI     |          |            |                    |           |
+
+Las pruebas deberían incluir, como mínimo, una cuenta pequeña, una mediana y una grande, usando el mismo equipo y conexión. El tiempo debe medirse desde **Iniciar análisis** hasta que aparezca **Finalizado** y se descargue el Excel.
+
+> **Límite actual:** el modo UI recolecta hasta 10.000 usuarios por lista. El modo API permite hasta 600 páginas de 100 usuarios (aproximadamente 60.000 por lista). Por eso una cuenta de 100K sirve actualmente como prueba de estrés, pero no se debe considerar una extracción completa. Además, puede generar muchos reintentos y bloqueos temporales de Instagram.
 
 ## Uso rápido (Windows EXE)
 
