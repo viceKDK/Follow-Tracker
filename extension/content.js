@@ -420,6 +420,60 @@
     return `ft_cache_${toSafeFilePart(profile)}`;
   }
 
+  function historyKeyForProfile(profile) {
+    return `ft_history_${toSafeFilePart(profile)}`;
+  }
+
+  function uniqueUsernames(rows) {
+    const byLowercase = new Map();
+    (rows || []).forEach((row) => {
+      const username = row && typeof row.username === "string" ? row.username.trim() : "";
+      if (!username) return;
+      byLowercase.set(username.toLowerCase(), username);
+    });
+    return Array.from(byLowercase.values()).sort((a, b) => a.localeCompare(b));
+  }
+
+  async function compareAndSaveProfileHistory(profile, followersRows, followingRows, capturedAt) {
+    const key = historyKeyForProfile(profile);
+    const previous = await storageGet(key);
+    const followers = uniqueUsernames(followersRows);
+    const following = uniqueUsernames(followingRows);
+    const hasPrevious =
+      previous &&
+      Array.isArray(previous.followers) &&
+      Array.isArray(previous.following);
+
+    let newFollowers = [];
+    let newFollowing = [];
+    if (hasPrevious) {
+      const previousFollowers = new Set(previous.followers.map((u) => String(u).toLowerCase()));
+      const previousFollowing = new Set(previous.following.map((u) => String(u).toLowerCase()));
+      newFollowers = followers.filter((u) => !previousFollowers.has(u.toLowerCase()));
+      newFollowing = following.filter((u) => !previousFollowing.has(u.toLowerCase()));
+    }
+
+    await storageSet({
+      [key]: {
+        profile: String(profile || "").toLowerCase(),
+        followers,
+        following,
+        updatedAt: capturedAt || nowIso(),
+      },
+    });
+
+    if (hasPrevious) {
+      sendProgress(
+        `Comparacion con captura anterior: ${newFollowers.length} nuevos seguidores y ` +
+        `${newFollowing.length} nuevos seguidos.`
+      );
+    } else {
+      sendProgress(`Primera captura de @${profile}: historial guardado como linea base.`);
+    }
+
+    return { newFollowers, newFollowing, isBaseline: !hasPrevious };
+  }
+
   function mergeRowsByUsername(aRows, bRows) {
     const map = new Map();
     (aRows || []).forEach((r) => {
@@ -795,7 +849,13 @@
       followers: Number.isFinite(info.followersCount) ? info.followersCount : followersRows.length,
       following: Number.isFinite(info.followingCount) ? info.followingCount : followingRows.length,
     };
-    const reportHtml = buildExcelHtml(profile, comparison, ts, totalsApi);
+    const activity = await compareAndSaveProfileHistory(
+      profile,
+      followersRows,
+      followingRows,
+      ts
+    );
+    const reportHtml = buildExcelHtml(profile, comparison, ts, totalsApi, activity);
     const reportName = `ig_auto_${safeProfile}_seguidores_vs_seguidos_${nowCompact()}.xls`;
     downloadText(reportName, reportHtml, "application/vnd.ms-excel;charset=utf-8;");
     sendProgress(`Descargado: reporte Excel.`);
@@ -1519,11 +1579,20 @@
     return { nos, noLoSigo, noMeSigue };
   }
 
-  function buildExcelHtml(profile, comparison, scrapeTime, totals) {
+  function buildExcelHtml(profile, comparison, scrapeTime, totals, activity) {
     const nos = comparison.nos;
     const noLoSigo = comparison.noLoSigo;
     const noMeSigue = comparison.noMeSigue;
-    const maxLen = Math.max(nos.length, noLoSigo.length, noMeSigue.length, 1);
+    const newFollowers = activity && Array.isArray(activity.newFollowers) ? activity.newFollowers : [];
+    const newFollowing = activity && Array.isArray(activity.newFollowing) ? activity.newFollowing : [];
+    const maxLen = Math.max(
+      nos.length,
+      noLoSigo.length,
+      noMeSigue.length,
+      newFollowers.length,
+      newFollowing.length,
+      1
+    );
     const title = "Seguidores vs Seguidos (" + profile + ")";
     const totalFollowers = totals && Number.isFinite(totals.followers) ? totals.followers : null;
     const totalFollowing = totals && Number.isFinite(totals.following) ? totals.following : null;
@@ -1532,6 +1601,11 @@
     if (totalFollowers != null) subtitleParts.push(`Total seguidores: ${totalFollowers}`);
     if (totalFollowing != null) subtitleParts.push(`Total seguidos: ${totalFollowing}`);
     if (scrapeDateFmt) subtitleParts.push(`Scrapeo: ${scrapeDateFmt}`);
+    if (activity && activity.isBaseline) {
+      subtitleParts.push("Primera captura: linea base para futuras comparaciones");
+    } else if (activity) {
+      subtitleParts.push("Comparado con la captura anterior de este perfil");
+    }
     const subtitle = subtitleParts.join("   |   ");
     const esc = (s) =>
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -1551,8 +1625,8 @@
       r += `<Cell ss:Index="2" ss:StyleID="${s}"><Data ss:Type="String">${esc(nos[i] || "")}</Data></Cell>`;
       r += `<Cell ss:Index="4" ss:StyleID="${s}"><Data ss:Type="String">${esc(noLoSigo[i] || "")}</Data></Cell>`;
       r += `<Cell ss:Index="6" ss:StyleID="${s}"><Data ss:Type="String">${esc(noMeSigue[i] || "")}</Data></Cell>`;
-      r += `<Cell ss:Index="8" ss:StyleID="${s}"><Data ss:Type="String"></Data></Cell>`;
-      r += `<Cell ss:Index="10" ss:StyleID="${s}"><Data ss:Type="String"></Data></Cell>`;
+      r += `<Cell ss:Index="8" ss:StyleID="${s}"><Data ss:Type="String">${esc(newFollowers[i] || "")}</Data></Cell>`;
+      r += `<Cell ss:Index="10" ss:StyleID="${s}"><Data ss:Type="String">${esc(newFollowing[i] || "")}</Data></Cell>`;
       if (i === 0) {
         r += `<Cell ss:Index="12" ss:StyleID="d"><Data ss:Type="String">${esc(scrapeDateFmt)}</Data></Cell>`;
       }
@@ -1604,8 +1678,8 @@
       `<Cell ss:Index="2" ss:StyleID="h1"><Data ss:Type="String">Nos seguimos (${nos.length})</Data></Cell>`,
       `<Cell ss:Index="4" ss:StyleID="h2"><Data ss:Type="String">No lo sigo (${noLoSigo.length})</Data></Cell>`,
       `<Cell ss:Index="6" ss:StyleID="h3"><Data ss:Type="String">No me sigue (${noMeSigue.length})</Data></Cell>`,
-      '<Cell ss:Index="8" ss:StyleID="h4"><Data ss:Type="String">Nuevos Seguidores (0)</Data></Cell>',
-      '<Cell ss:Index="10" ss:StyleID="h5"><Data ss:Type="String">Nuevos Siguiendo (0)</Data></Cell>',
+      `<Cell ss:Index="8" ss:StyleID="h4"><Data ss:Type="String">Nuevos Seguidores (${newFollowers.length})</Data></Cell>`,
+      `<Cell ss:Index="10" ss:StyleID="h5"><Data ss:Type="String">Nuevos Seguidos (${newFollowing.length})</Data></Cell>`,
       '<Cell ss:Index="12" ss:StyleID="h6"><Data ss:Type="String">Ultimo Scrapeo</Data></Cell>',
       "</Row>",
       ...dataRows,
@@ -1694,7 +1768,13 @@
           followers: phaseExpected.followers != null ? phaseExpected.followers : mergedFollowersRows.length,
           following: phaseExpected.following != null ? phaseExpected.following : mergedFollowingRows.length,
         };
-        const reportHtml = buildExcelHtml(profile, mergedComparison, scrapeTime, totalsUi);
+        const activity = await compareAndSaveProfileHistory(
+          profile,
+          mergedFollowersRows,
+          mergedFollowingRows,
+          scrapeTime
+        );
+        const reportHtml = buildExcelHtml(profile, mergedComparison, scrapeTime, totalsUi, activity);
         const reportName = `ig_auto_${toSafeFilePart(profile)}_seguidores_vs_seguidos_${nowCompact()}.xls`;
         downloadText(reportName, reportHtml, "application/vnd.ms-excel;charset=utf-8;");
         sendProgress(`Descargado: reporte Excel.`);
