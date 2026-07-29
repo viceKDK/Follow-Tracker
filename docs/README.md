@@ -14,6 +14,9 @@ Subi las capturas con estos nombres exactos para que el README las muestre autom
 | `04-pin-icon.png` | Icono de la extension fijado en la barra de Chrome/Edge |
 | `05-overlay.png` | Panel flotante en Instagram con boton "Iniciar analisis" |
 | `06-result.png` | Carpeta de descargas con los 3 archivos generados (2 CSV + 1 XLS) |
+| `07-profile-open.png` | Perfil objetivo abierto antes de mostrar el panel |
+| `08-analysis-running.png` | Panel mostrando el progreso durante el analisis |
+| `09-analysis-finished.png` | Panel al 100%, con el modo utilizado y el historial guardado |
 
 ## Recomendaciones
 

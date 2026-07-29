@@ -37,7 +37,25 @@ Recomendado para usuario final.
 | 5 | Abre Instagram en el perfil objetivo y pulsa el icono de la extensión. El panel flotante aparece arriba a la derecha. Click en **Iniciar análisis** | ![Paso 5](docs/05-overlay.png) |
 | 6 | Espera a que termine. Los archivos se descargan automáticamente | ![Paso 6](docs/06-result.png) |
 
-> Las imágenes están en `docs/`. Mientras no las subas, GitHub muestra un cuadro vacío en cada fila.
+> Las imágenes están en `docs/`. Las capturas de instalación que todavía no se hayan agregado aparecerán como un cuadro vacío en GitHub.
+
+### Así se ve la extensión
+
+**1. Abre el perfil que quieres analizar**
+
+<img src="docs/07-profile-open.png" alt="Perfil de Instagram abierto antes del análisis" width="900">
+
+**2. Pulsa el icono de la extensión para abrir el panel**
+
+<img src="docs/05-overlay.png" alt="Panel Follow Tracker Auto listo para iniciar" width="900">
+
+**3. Durante el análisis puedes ver el progreso de seguidores y seguidos**
+
+<img src="docs/08-analysis-running.png" alt="Follow Tracker Auto mostrando el análisis en progreso" width="900">
+
+**4. Al finalizar muestra el método utilizado, el 100% recolectado y el historial guardado**
+
+<img src="docs/09-analysis-finished.png" alt="Follow Tracker Auto con el análisis finalizado mediante API" width="900">
 
 Qué hace automáticamente:
 
