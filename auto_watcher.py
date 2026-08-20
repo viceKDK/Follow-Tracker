@@ -1,12 +1,7 @@
 import os
-import re
-import shutil
 import time
 
 import comparar_ig
-
-
-AUTO_CSV_RE = re.compile(r"^ig_auto_(.+)_(followers|following)_(\d+)\.csv$", re.IGNORECASE)
 
 
 def _list_auto_csv(watch_dirs):
@@ -15,93 +10,57 @@ def _list_auto_csv(watch_dirs):
         if not root or not os.path.isdir(root):
             continue
         for name in os.listdir(root):
-            m = AUTO_CSV_RE.match(name)
-            if not m:
-                continue
-            profile, phase, ts = m.group(1), m.group(2).lower(), int(m.group(3))
-            items.append(
-                {
-                    "path": os.path.join(root, name),
-                    "profile": profile,
-                    "phase": phase,
-                    "ts": ts,
-                }
-            )
+            parsed = comparar_ig._parse_auto_csv_name(os.path.join(root, name))
+            if parsed:
+                items.append(parsed)
     return items
 
 
 def _find_new_pair_since(start_ts_ms, watch_dirs):
     items = [x for x in _list_auto_csv(watch_dirs) if x["ts"] >= start_ts_ms]
-    if not items:
-        return None
-
-    by_profile = {}
-    for item in items:
-        by_profile.setdefault(item["profile"], []).append(item)
-
-    best = None
-    best_ts = -1
-    for profile, group in by_profile.items():
-        followers = max((x for x in group if x["phase"] == "followers"), key=lambda x: x["ts"], default=None)
-        following = max((x for x in group if x["phase"] == "following"), key=lambda x: x["ts"], default=None)
-        if not followers or not following:
-            continue
-        pair_ts = max(followers["ts"], following["ts"])
-        if pair_ts > best_ts:
-            best_ts = pair_ts
-            best = {
-                "profile": profile,
-                "followers_path": followers["path"],
-                "following_path": following["path"],
-                "ts": pair_ts,
-            }
-    return best
+    return comparar_ig._select_best_auto_pair(items)
 
 
 def _generate_excel_from_pair(base_path, pair):
-    followers = comparar_ig.leer_csv_usuarios(pair["followers_path"])
-    following = comparar_ig.leer_csv_usuarios(pair["following_path"])
-
-    profile_folder = comparar_ig.ensure_dir(
-        os.path.join(base_path, comparar_ig.sanitize_folder_name(pair["profile"]))
-    )
-    target_followers = os.path.join(profile_folder, "followers.csv")
-    target_following = os.path.join(profile_folder, "following.csv")
-    shutil.copy2(pair["followers_path"], target_followers)
-    shutil.copy2(pair["following_path"], target_following)
-
-    profile_key = f"external_auto::{pair['profile']}"
-    h_path = comparar_ig.historial_path(base_path, profile_key)
-    followers_prev, following_prev = comparar_ig.cargar_historial(h_path)
-    nuevos_seguidores = sorted(followers - followers_prev) if followers_prev else []
-    nuevos_siguiendo = sorted(following - following_prev) if following_prev else []
-    comparar_ig.guardar_historial(h_path, followers, following)
-
-    output_path = os.path.join(profile_folder, "seguidores_vs_seguidos.xlsx")
+    data = comparar_ig._build_auto_data_from_pair(base_path, pair)
     c_nos, c_no_lo_sigo, c_no_me_sigue = comparar_ig.generar_excel(
-        output_path=output_path,
-        titulo=f"Analisis de Perfil Externo ({pair['profile']})",
-        followers=followers,
-        following=following,
-        nuevos_seguidores=nuevos_seguidores,
-        nuevos_siguiendo=nuevos_siguiendo,
-        ultimo_scrapeo=comparar_ig.format_unix_ms(pair["ts"]),
+        output_path=data["output_path"],
+        titulo=data["titulo"],
+        followers=data["followers"],
+        following=data["following"],
+        nuevos_seguidores=data["nuevos_seguidores"],
+        nuevos_siguiendo=data["nuevos_siguiendo"],
+        ultimo_scrapeo=data["ultimo_scrapeo"],
+        dejaron_de_seguir=data["dejaron_de_seguir"],
+        dejaste_de_seguir=data["dejaste_de_seguir"],
     )
+    # Commit the baseline only after the workbook was successfully written.
+    history_saved = True
+    if data.get("history_warning"):
+        history_saved = comparar_ig.confirmar_actualizacion_historial(data["history_warning"])
+    if history_saved:
+        comparar_ig.guardar_historial(data["history_path"], data["followers"], data["following"])
 
-    if nuevos_seguidores or nuevos_siguiendo:
+    if data["has_history"]:
         msg_nuevos = (
             f"\n\nComparacion con anterior:\n"
-            f"- Nuevos seguidores: {len(nuevos_seguidores)}\n"
-            f"- Nuevos siguiendo: {len(nuevos_siguiendo)}"
+            f"- Nuevos seguidores: {len(data['nuevos_seguidores'])}\n"
+            f"- Nuevos siguiendo: {len(data['nuevos_siguiendo'])}\n"
+            f"- Dejaron de seguirte: {len(data['dejaron_de_seguir'])}\n"
+            f"- Dejaste de seguir: {len(data['dejaste_de_seguir'])}"
         )
+        if not history_saved:
+            msg_nuevos += "\n- Historial: se conservo la linea base anterior."
+    elif history_saved:
+        msg_nuevos = "\n\n(Primera ejecucion: se guardo la linea base)"
     else:
-        msg_nuevos = "\n\n(Primera ejecucion - sin comparacion previa)"
+        msg_nuevos = "\n\nNo se guardo una linea base."
 
     comparar_ig.popup(
         "AUTO completado",
         f"Perfil: {pair['profile']}\n"
-        f"Carpeta: {profile_folder}\n"
-        f"Excel: {output_path}\n\n"
+        f"Carpeta: {data['work_dir']}\n"
+        f"Excel: {data['output_path']}\n\n"
         f"Resumen:\n"
         f"- Nos seguimos: {c_nos}\n"
         f"- No lo sigo: {c_no_lo_sigo}\n"

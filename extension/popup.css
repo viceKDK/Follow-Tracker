@@ -15,3 +15,16 @@ body {
   font-size: 13px;
   color: #3a4b57;
 }
+
+#ft-popup-retry {
+  margin-top: 12px;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  background: #1177cc;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#ft-popup-retry:disabled { opacity: .55; cursor: default; }

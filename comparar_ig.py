@@ -9,11 +9,23 @@ import sys
 import tkinter as tk
 from datetime import datetime
 import time
-from tkinter import filedialog, messagebox
+import tempfile
+from tkinter import filedialog, messagebox, simpledialog
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.worksheet.table import Table, TableStyleInfo
+
+
+AUTO_CSV_RE = re.compile(
+    r"^ig_auto_(.+)_(followers|following)_([a-z0-9-]+)_(\d+)\.csv$",
+    re.IGNORECASE,
+)
+LEGACY_AUTO_CSV_RE = re.compile(
+    r"^ig_auto_(.+)_(followers|following)_(\d+)\.csv$",
+    re.IGNORECASE,
+)
+LEGACY_PAIR_MAX_GAP_MS = 15 * 60 * 1000
 
 
 def _with_hidden_root():
@@ -26,6 +38,18 @@ def popup(title, message):
     root = _with_hidden_root()
     messagebox.showinfo(title, message, parent=root)
     root.destroy()
+
+
+def confirmar_actualizacion_historial(message):
+    root = _with_hidden_root()
+    confirmed = messagebox.askyesno(
+        "Cambio grande detectado",
+        f"{message}\n\nEl reporte se genero igualmente. "
+        "¿Quieres usar esta captura como nueva linea base?",
+        parent=root,
+    )
+    root.destroy()
+    return confirmed
 
 
 def ensure_dir(path):
@@ -59,6 +83,23 @@ def seleccionar_archivo(titulo):
     )
     root.destroy()
     return file_path
+
+
+def preguntar_perfil(valor_inicial=""):
+    root = _with_hidden_root()
+    value = simpledialog.askstring(
+        "Perfil de Instagram",
+        "Escribe el usuario del perfil para mantener un historial correcto:",
+        initialvalue=valor_inicial,
+        parent=root,
+    )
+    root.destroy()
+    if value is None:
+        return None
+    value = value.strip().lstrip("@").lower()
+    if not re.fullmatch(r"[a-zA-Z0-9._]+", value):
+        raise ValueError("El usuario del perfil solo puede contener letras, numeros, puntos y guiones bajos.")
+    return value
 
 
 def preguntar_modo():
@@ -233,34 +274,42 @@ def leer_csv_usuarios(path):
         for row in reader:
             if not row:
                 continue
-            usuario = row[0].strip()
-            if not usuario or usuario.lower() == "usuario":
+            usuario = row[0].strip().lstrip("@")
+            if not usuario or usuario.lower() in {"usuario", "username"}:
                 continue
-            usuarios.add(usuario)
+            # Strictly accept Instagram usernames.  In particular, never pass
+            # spreadsheet formula-like values through to openpyxl.
+            if usuario[0] in "=+-@" or not re.fullmatch(r"[A-Za-z0-9._]+", usuario):
+                raise ValueError(f"Username invalido en {os.path.basename(path)}: {usuario!r}")
+            usuarios.add(usuario.lower())
+    if not usuarios:
+        raise ValueError(f"CSV vacio o sin usernames validos: {path}")
     return usuarios
 
 
 def parse_followers_json(path):
     raw = cargar_json(path)
-    return {
-        item["string_list_data"][0]["value"]
+    values = {
+        str(item["string_list_data"][0]["value"]).strip().lstrip("@").lower()
         for item in raw
         if item.get("string_list_data")
         and item["string_list_data"]
         and item["string_list_data"][0].get("value")
     }
+    return _validate_user_set(values, "followers JSON")
 
 
 def parse_following_json(path):
     raw = cargar_json(path)
     rel = raw.get("relationships_following", [])
-    return {
-        item["string_list_data"][0]["value"]
+    values = {
+        str(item["string_list_data"][0]["value"]).strip().lstrip("@").lower()
         for item in rel
         if item.get("string_list_data")
         and item["string_list_data"]
         and item["string_list_data"][0].get("value")
     }
+    return _validate_user_set(values, "following JSON")
 
 
 def historial_path(base_path, key):
@@ -271,21 +320,98 @@ def historial_path(base_path, key):
 def cargar_historial(path):
     if not os.path.exists(path):
         return set(), set()
+    return cargar_historial_estricto(path)
+
+
+def _validate_user_set(values, label="usuarios"):
+    if not isinstance(values, (set, list, tuple)):
+        raise ValueError(f"{label} invalido")
+    result = set()
+    for value in values:
+        value = str(value).strip().lstrip("@").lower()
+        if not re.fullmatch(r"[a-z0-9._]+", value):
+            raise ValueError(f"{label} contiene username invalido")
+        result.add(value)
+    return result
+
+
+def historial_estado(path):
+    """Return missing, valid, or corrupt without silently treating corruption as baseline."""
+    if not os.path.isfile(path):
+        return "missing"
     try:
-        data = cargar_json(path)
-        return set(data.get("followers", [])), set(data.get("following", []))
+        cargar_historial_estricto(path)
     except Exception:
-        return set(), set()
+        return "corrupt"
+    return "valid"
+
+
+def cargar_historial_estricto(path):
+    data = cargar_json(path)
+    if data.get("schema_version") != 2:
+        raise ValueError("schema de historial invalido")
+    return (_validate_user_set(data["followers"]), _validate_user_set(data["following"]))
+
+
+def historial_existe(path):
+    return os.path.isfile(path)
+
+
+def calcular_cambios(actual, anterior, hay_historial):
+    if not hay_historial:
+        return [], []
+    return sorted(actual - anterior), sorted(anterior - actual)
 
 
 def guardar_historial(path, followers, following):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(
-            {"followers": sorted(followers), "following": sorted(following)},
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
+    ensure_dir(os.path.dirname(path) or ".")
+    fd, tmp_path = tempfile.mkstemp(prefix=".historial-", suffix=".tmp", dir=os.path.dirname(path) or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "schema_version": 2,
+                    "followers": sorted(followers),
+                    "following": sorted(following),
+                    "updated_at": format_dt(datetime.now()),
+                },
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+def validar_snapshot(followers, following, previous_followers=None, previous_following=None):
+    followers = _validate_user_set(followers, "followers")
+    following = _validate_user_set(following, "following")
+    if previous_followers is not None:
+        for current, previous, label in ((followers, previous_followers, "followers"), (following, previous_following, "following")):
+            if previous and not current:
+                raise ValueError(f"Caida sospechosa: {label} quedo vacio")
+            if len(previous) >= 10 and len(current) < len(previous) * 0.5:
+                raise ValueError(f"Caida sospechosa de {label}: {len(previous)} -> {len(current)}")
+    return followers, following
+
+
+def detectar_caida_sospechosa(followers, following, previous_followers, previous_following):
+    warnings = []
+    for current, previous, label in (
+        (followers, previous_followers, "seguidores"),
+        (following, previous_following, "seguidos"),
+    ):
+        if previous and not current:
+            warnings.append(f"{label}: {len(previous)} -> 0")
+        elif len(previous) >= 10 and len(current) < len(previous) * 0.5:
+            warnings.append(f"{label}: {len(previous)} -> {len(current)}")
+    if not warnings:
+        return None
+    return "La captura presenta una caida mayor al 50% (" + ", ".join(warnings) + ")."
 
 
 def generar_excel(
@@ -296,7 +422,11 @@ def generar_excel(
     nuevos_seguidores,
     nuevos_siguiendo,
     ultimo_scrapeo,
+    dejaron_de_seguir=None,
+    dejaste_de_seguir=None,
 ):
+    dejaron_de_seguir = sorted(dejaron_de_seguir or [])
+    dejaste_de_seguir = sorted(dejaste_de_seguir or [])
     nos_seguimos = sorted(followers & following)
     no_me_sigue = sorted(following - followers)
     no_lo_sigo = sorted(followers - following)
@@ -306,7 +436,7 @@ def generar_excel(
     ws.title = "Seguimiento Instagram"
     ws.sheet_view.showGridLines = False
 
-    ws.merge_cells("B1:L3")
+    ws.merge_cells("B1:P3")
     ws["B1"] = titulo
     ws["B1"].font = Font(size=24, bold=True, color="2E75B6")
     ws["B1"].alignment = Alignment(horizontal="center", vertical="center")
@@ -321,6 +451,10 @@ def generar_excel(
         f"Nuevos Seguidores ({len(nuevos_seguidores)})",
         "",
         f"Nuevos Siguiendo ({len(nuevos_siguiendo)})",
+        "",
+        f"Dejaron de Seguirte ({len(dejaron_de_seguir)})",
+        "",
+        f"Dejaste de Seguir ({len(dejaste_de_seguir)})",
         "",
         "Ultimo Scrapeo",
     ]
@@ -343,6 +477,10 @@ def generar_excel(
             cell.fill = PatternFill(start_color="00B0F0", end_color="00B0F0", fill_type="solid")
         if col_idx == 12:
             cell.fill = PatternFill(start_color="6A1B9A", end_color="6A1B9A", fill_type="solid")
+        if col_idx == 14:
+            cell.fill = PatternFill(start_color="9C2F2F", end_color="9C2F2F", fill_type="solid")
+        if col_idx == 16:
+            cell.fill = PatternFill(start_color="795548", end_color="795548", fill_type="solid")
 
     max_len = max(
         len(nos_seguimos),
@@ -350,6 +488,8 @@ def generar_excel(
         len(no_lo_sigo),
         len(nuevos_seguidores),
         len(nuevos_siguiendo),
+        len(dejaron_de_seguir),
+        len(dejaste_de_seguir),
         1,
     )
     for i in range(max_len):
@@ -364,6 +504,10 @@ def generar_excel(
             nuevos_seguidores[i] if i < len(nuevos_seguidores) else "",
             "",
             nuevos_siguiendo[i] if i < len(nuevos_siguiendo) else "",
+            "",
+            dejaron_de_seguir[i] if i < len(dejaron_de_seguir) else "",
+            "",
+            dejaste_de_seguir[i] if i < len(dejaste_de_seguir) else "",
             "",
             ultimo_scrapeo if i == 0 else "",
         ]
@@ -380,7 +524,11 @@ def generar_excel(
     ws.column_dimensions["I"].width = 10
     ws.column_dimensions["J"].width = 30
     ws.column_dimensions["K"].width = 10
-    ws.column_dimensions["L"].width = 24
+    ws.column_dimensions["L"].width = 30
+    ws.column_dimensions["M"].width = 10
+    ws.column_dimensions["N"].width = 30
+    ws.column_dimensions["O"].width = 10
+    ws.column_dimensions["P"].width = 24
 
     thin_border = Border(
         left=Side(style="thin"),
@@ -395,7 +543,9 @@ def generar_excel(
         ("Tab_NoMeSig", f"F6:F{max(7, max_len + 6)}", "TableStyleMedium7"),
         ("Tab_NuevosSeg", f"H6:H{max(7, max_len + 6)}", "TableStyleMedium9"),
         ("Tab_NuevosSig", f"J6:J{max(7, max_len + 6)}", "TableStyleMedium11"),
-        ("Tab_UltimoScrapeo", "L6:L7", "TableStyleMedium4"),
+        ("Tab_DejaronSeg", f"L6:L{max(7, max_len + 6)}", "TableStyleMedium4"),
+        ("Tab_DejasteSeg", f"N6:N{max(7, max_len + 6)}", "TableStyleMedium5"),
+        ("Tab_UltimoScrapeo", "P6:P7", "TableStyleMedium6"),
     ]
     for name, ref, style in table_defs:
         tab = Table(displayName=name, ref=ref)
@@ -412,17 +562,29 @@ def generar_excel(
 
 def cargar_modo_mi_cuenta(base_path):
     yo_dir = ensure_dir(os.path.join(base_path, "yo"))
-    followers_path = os.path.join(yo_dir, "followers_1.json")
-    following_path = os.path.join(yo_dir, "following.json")
-    followers = parse_followers_json(followers_path)
-    following = parse_following_json(following_path)
+    followers_paths = sorted(glob.glob(os.path.join(yo_dir, "followers*.json")))
+    following_paths = sorted(glob.glob(os.path.join(yo_dir, "following*.json")))
+    if not followers_paths or not following_paths:
+        raise FileNotFoundError("Se necesitan followers*.json y following*.json en la carpeta yo")
+    followers = set().union(*(parse_followers_json(p) for p in followers_paths))
+    following = set().union(*(parse_following_json(p) for p in following_paths))
+    validar_snapshot(followers, following)
 
-    h_path = historial_path(base_path, "local_json")
-    followers_prev, following_prev = cargar_historial(h_path)
+    profile = preguntar_perfil("")
+    if profile is None:
+        return None
+    h_path = historial_path(base_path, f"local::{profile}")
+    state = historial_estado(h_path)
+    if state == "corrupt":
+        raise ValueError("El historial local esta corrupto; no se reemplazara automaticamente.")
+    has_history = state == "valid"
+    followers_prev, following_prev = cargar_historial_estricto(h_path) if has_history else (set(), set())
+    history_warning = detectar_caida_sospechosa(
+        followers, following, followers_prev, following_prev
+    ) if has_history else None
 
-    nuevos_seguidores = sorted(followers - followers_prev) if followers_prev else []
-    nuevos_siguiendo = sorted(following - following_prev) if following_prev else []
-    guardar_historial(h_path, followers, following)
+    nuevos_seguidores, dejaron_de_seguir = calcular_cambios(followers, followers_prev, has_history)
+    nuevos_siguiendo, dejaste_de_seguir = calcular_cambios(following, following_prev, has_history)
 
     return {
         "titulo": "Seguimiento de Instagram",
@@ -432,8 +594,13 @@ def cargar_modo_mi_cuenta(base_path):
         "following": following,
         "nuevos_seguidores": nuevos_seguidores,
         "nuevos_siguiendo": nuevos_siguiendo,
+        "dejaron_de_seguir": dejaron_de_seguir,
+        "dejaste_de_seguir": dejaste_de_seguir,
+        "has_history": has_history,
         "modo_label": "mi cuenta (JSON)",
         "ultimo_scrapeo": format_dt(datetime.now()),
+        "history_path": h_path,
+        "history_warning": history_warning,
     }
 
 
@@ -448,37 +615,63 @@ def cargar_modo_otra_cuenta(base_path):
     followers = leer_csv_usuarios(path_followers)
     following = leer_csv_usuarios(path_following)
 
-    profile_key = f"external::{os.path.basename(path_followers)}::{os.path.basename(path_following)}"
-    h_path = historial_path(base_path, profile_key)
-    followers_prev, following_prev = cargar_historial(h_path)
+    parsed_followers = _parse_auto_csv_name(path_followers)
+    parsed_following = _parse_auto_csv_name(path_following)
+    initial_profile = ""
+    if parsed_followers and parsed_following and parsed_followers["profile"] == parsed_following["profile"]:
+        initial_profile = parsed_followers["profile"]
+    profile = preguntar_perfil(initial_profile)
+    if profile is None:
+        return None
 
-    nuevos_seguidores = sorted(followers - followers_prev) if followers_prev else []
-    nuevos_siguiendo = sorted(following - following_prev) if following_prev else []
-    guardar_historial(h_path, followers, following)
+    profile_key = f"external::{profile}"
+    h_path = historial_path(base_path, profile_key)
+    state = historial_estado(h_path)
+    if state == "corrupt":
+        raise ValueError("El historial externo esta corrupto; no se reemplazara automaticamente.")
+    has_history = state == "valid"
+    followers_prev, following_prev = cargar_historial_estricto(h_path) if has_history else (set(), set())
+    history_warning = detectar_caida_sospechosa(
+        followers, following, followers_prev, following_prev
+    ) if has_history else None
+
+    nuevos_seguidores, dejaron_de_seguir = calcular_cambios(followers, followers_prev, has_history)
+    nuevos_siguiendo, dejaste_de_seguir = calcular_cambios(following, following_prev, has_history)
 
     out_dir = os.path.dirname(path_followers) or base_path
     output_path = os.path.join(out_dir, "analisis_externo.xlsx")
     return {
-        "titulo": "Analisis de Perfil Externo",
+        "titulo": f"Analisis de Perfil Externo ({profile})",
         "output_path": output_path,
         "work_dir": out_dir,
         "followers": followers,
         "following": following,
         "nuevos_seguidores": nuevos_seguidores,
         "nuevos_siguiendo": nuevos_siguiendo,
+        "dejaron_de_seguir": dejaron_de_seguir,
+        "dejaste_de_seguir": dejaste_de_seguir,
+        "has_history": has_history,
         "modo_label": "otra cuenta (CSV)",
         "ultimo_scrapeo": format_dt(datetime.now()),
+        "history_path": h_path,
+        "history_warning": history_warning,
     }
 
 
 def _parse_auto_csv_name(path):
     name = os.path.basename(path)
-    # ig_auto_<profile>_<phase>_<timestamp>.csv
-    m = re.match(r"^ig_auto_(.+)_(followers|following)_(\d+)\.csv$", name, re.IGNORECASE)
-    if not m:
-        return None
-    profile, phase, ts = m.group(1), m.group(2).lower(), int(m.group(3))
-    return {"path": path, "profile": profile, "phase": phase, "ts": ts}
+    # Formato actual: ig_auto_<profile>_<phase>_<run_id>_<timestamp>.csv
+    m = AUTO_CSV_RE.match(name)
+    if m:
+        profile, phase, run_id, ts = m.group(1), m.group(2).lower(), m.group(3).lower(), int(m.group(4))
+        return {"path": path, "profile": profile, "phase": phase, "run_id": run_id, "ts": ts}
+    # Compatibilidad temporal con descargas anteriores. Solo se emparejan si
+    # sus timestamps estan suficientemente cerca.
+    legacy = LEGACY_AUTO_CSV_RE.match(name)
+    if legacy:
+        profile, phase, ts = legacy.group(1), legacy.group(2).lower(), int(legacy.group(3))
+        return {"path": path, "profile": profile, "phase": phase, "run_id": None, "ts": ts}
+    return None
 
 
 def _collect_auto_csv_candidates(base_path):
@@ -495,66 +688,71 @@ def _collect_auto_csv_candidates(base_path):
     return candidates
 
 
-def _find_latest_auto_pair(base_path):
-    candidates = _collect_auto_csv_candidates(base_path)
-    if not candidates:
-        return None
+def _select_best_auto_pair(candidates):
+    complete_pairs = []
 
-    by_profile = {}
+    by_run = {}
     for item in candidates:
-        by_profile.setdefault(item["profile"], []).append(item)
+        if item.get("run_id"):
+            by_run.setdefault((item["profile"], item["run_id"]), []).append(item)
+    for (profile, run_id), items in by_run.items():
+        followers = max((x for x in items if x["phase"] == "followers"), key=lambda x: x["ts"], default=None)
+        following = max((x for x in items if x["phase"] == "following"), key=lambda x: x["ts"], default=None)
+        if followers and following:
+            complete_pairs.append(
+                {
+                    "profile": profile,
+                    "run_id": run_id,
+                    "followers_path": followers["path"],
+                    "following_path": following["path"],
+                    "ts": max(followers["ts"], following["ts"]),
+                }
+            )
 
-    best = None
-    best_ts = -1
-    for profile, items in by_profile.items():
-        latest_followers = max((x for x in items if x["phase"] == "followers"), key=lambda x: x["ts"], default=None)
-        latest_following = max((x for x in items if x["phase"] == "following"), key=lambda x: x["ts"], default=None)
-        if not latest_followers or not latest_following:
-            continue
-        pair_ts = max(latest_followers["ts"], latest_following["ts"])
-        if pair_ts > best_ts:
-            best_ts = pair_ts
-            best = {
-                "profile": profile,
-                "followers_path": latest_followers["path"],
-                "following_path": latest_following["path"],
-                "ts": pair_ts,
-            }
-    return best
+    # Archivos antiguos no tienen run_id. Elegimos el par mas reciente dentro
+    # de una ventana corta; nunca mezclamos automaticamente archivos muy alejados.
+    legacy_by_profile = {}
+    for item in candidates:
+        if not item.get("run_id"):
+            legacy_by_profile.setdefault(item["profile"], []).append(item)
+    for profile, items in legacy_by_profile.items():
+        followers_items = [x for x in items if x["phase"] == "followers"]
+        following_items = [x for x in items if x["phase"] == "following"]
+        possible = [
+            (max(f["ts"], g["ts"]), abs(f["ts"] - g["ts"]), f, g)
+            for f in followers_items
+            for g in following_items
+            if abs(f["ts"] - g["ts"]) <= LEGACY_PAIR_MAX_GAP_MS
+        ]
+        if possible:
+            _, _, followers, following = max(possible, key=lambda x: (x[0], -x[1]))
+            complete_pairs.append(
+                {
+                    "profile": profile,
+                    "run_id": None,
+                    "followers_path": followers["path"],
+                    "following_path": following["path"],
+                    "ts": max(followers["ts"], following["ts"]),
+                }
+            )
+
+    return max(complete_pairs, key=lambda x: x["ts"], default=None)
+
+
+def _find_latest_auto_pair(base_path):
+    return _select_best_auto_pair(_collect_auto_csv_candidates(base_path))
 
 
 def _find_new_auto_pair_since(base_path, start_ts_ms):
     candidates = [x for x in _collect_auto_csv_candidates(base_path) if x["ts"] >= start_ts_ms]
-    if not candidates:
-        return None
-
-    by_profile = {}
-    for item in candidates:
-        by_profile.setdefault(item["profile"], []).append(item)
-
-    best = None
-    best_ts = -1
-    for profile, items in by_profile.items():
-        latest_followers = max((x for x in items if x["phase"] == "followers"), key=lambda x: x["ts"], default=None)
-        latest_following = max((x for x in items if x["phase"] == "following"), key=lambda x: x["ts"], default=None)
-        if not latest_followers or not latest_following:
-            continue
-        pair_ts = max(latest_followers["ts"], latest_following["ts"])
-        if pair_ts > best_ts:
-            best_ts = pair_ts
-            best = {
-                "profile": profile,
-                "followers_path": latest_followers["path"],
-                "following_path": latest_following["path"],
-                "ts": pair_ts,
-            }
-    return best
+    return _select_best_auto_pair(candidates)
 
 
 def _build_auto_data_from_pair(base_path, pair):
     followers = leer_csv_usuarios(pair["followers_path"])
     following = leer_csv_usuarios(pair["following_path"])
 
+    validar_snapshot(followers, following)
     profile_folder = ensure_dir(os.path.join(base_path, sanitize_folder_name(pair["profile"])))
     target_followers = os.path.join(profile_folder, "followers.csv")
     target_following = os.path.join(profile_folder, "following.csv")
@@ -563,11 +761,17 @@ def _build_auto_data_from_pair(base_path, pair):
 
     profile_key = f"external_auto::{pair['profile']}"
     h_path = historial_path(base_path, profile_key)
-    followers_prev, following_prev = cargar_historial(h_path)
+    state = historial_estado(h_path)
+    if state == "corrupt":
+        raise ValueError("El historial AUTO esta corrupto; no se reemplazara automaticamente.")
+    has_history = state == "valid"
+    followers_prev, following_prev = cargar_historial_estricto(h_path) if has_history else (set(), set())
+    history_warning = detectar_caida_sospechosa(
+        followers, following, followers_prev, following_prev
+    ) if has_history else None
 
-    nuevos_seguidores = sorted(followers - followers_prev) if followers_prev else []
-    nuevos_siguiendo = sorted(following - following_prev) if following_prev else []
-    guardar_historial(h_path, followers, following)
+    nuevos_seguidores, dejaron_de_seguir = calcular_cambios(followers, followers_prev, has_history)
+    nuevos_siguiendo, dejaste_de_seguir = calcular_cambios(following, following_prev, has_history)
 
     output_path = os.path.join(profile_folder, "seguidores_vs_seguidos.xlsx")
     return {
@@ -578,9 +782,14 @@ def _build_auto_data_from_pair(base_path, pair):
         "following": following,
         "nuevos_seguidores": nuevos_seguidores,
         "nuevos_siguiendo": nuevos_siguiendo,
+        "dejaron_de_seguir": dejaron_de_seguir,
+        "dejaste_de_seguir": dejaste_de_seguir,
+        "has_history": has_history,
         "modo_label": "otra cuenta (AUTO)",
         "ultimo_scrapeo": format_unix_ms(pair["ts"]),
         "copied_files": [target_followers, target_following],
+        "history_path": h_path,
+        "history_warning": history_warning,
     }
 
 
@@ -589,7 +798,8 @@ def cargar_modo_otra_cuenta_auto(base_path):
     if not pair:
         raise FileNotFoundError(
             "No se encontro un par automatico de CSV.\n"
-            "Archivos esperados: ig_auto_<perfil>_followers_<ts>.csv y ig_auto_<perfil>_following_<ts>.csv\n"
+            "Archivos esperados: ig_auto_<perfil>_followers_<run_id>_<ts>.csv y "
+            "ig_auto_<perfil>_following_<run_id>_<ts>.csv\n"
             "en la carpeta del programa o en Downloads."
         )
 
@@ -636,6 +846,9 @@ def procesar_datos():
             if data is None:
                 return
 
+        if data is None:
+            return
+
         c_nos, c_no_lo_sigo, c_no_me_sigue = generar_excel(
             data["output_path"],
             data["titulo"],
@@ -644,16 +857,31 @@ def procesar_datos():
             data["nuevos_seguidores"],
             data["nuevos_siguiendo"],
             data["ultimo_scrapeo"],
+            data.get("dejaron_de_seguir", []),
+            data.get("dejaste_de_seguir", []),
         )
+        # El reporte es el punto de commit. Una caida grande necesita
+        # confirmacion explicita antes de reemplazar la linea base.
+        history_saved = True
+        if data.get("history_warning"):
+            history_saved = confirmar_actualizacion_historial(data["history_warning"])
+        if history_saved:
+            guardar_historial(data["history_path"], data["followers"], data["following"])
 
-        if data["nuevos_seguidores"] or data["nuevos_siguiendo"]:
+        if data.get("has_history"):
             msg_nuevos = (
                 f"\n\nComparacion con anterior:\n"
                 f"- Nuevos seguidores: {len(data['nuevos_seguidores'])}\n"
-                f"- Nuevos siguiendo: {len(data['nuevos_siguiendo'])}"
+                f"- Nuevos siguiendo: {len(data['nuevos_siguiendo'])}\n"
+                f"- Dejaron de seguirte: {len(data.get('dejaron_de_seguir', []))}\n"
+                f"- Dejaste de seguir: {len(data.get('dejaste_de_seguir', []))}"
             )
+            if not history_saved:
+                msg_nuevos += "\n- Historial: se conservo la linea base anterior."
+        elif history_saved:
+            msg_nuevos = "\n\n(Primera ejecucion: se guardo la linea base)"
         else:
-            msg_nuevos = "\n\n(Primera ejecucion - sin comparacion previa)"
+            msg_nuevos = "\n\nNo se guardo una linea base."
 
         files_msg = ""
         if data.get("copied_files"):

@@ -10,6 +10,8 @@ dist/
 .dist/
 *.spec
 *.exe
+!comparar_ig.spec
+!icon.ico
 
 # Python
 __pycache__/
@@ -19,6 +21,11 @@ __pycache__/
 env/
 venv/
 ENV/
+
+# Node / browser test artifacts
+node_modules/
+.playwright-cli/
+output/playwright/
 
 # Images and Icons
 *.png
@@ -34,3 +41,4 @@ check_transparency.py
 !docs/*.png
 !docs/*.jpg
 !docs/*.gif
+!icon.ico

@@ -1,4 +1,8 @@
 (function () {
+  const Core = globalThis.FollowTrackerCore;
+  if (!Core) throw new Error("Follow Tracker Core no fue cargado.");
+  if (globalThis.__followTrackerContentLoaded) return;
+  globalThis.__followTrackerContentLoaded = true;
   const CONFIG = {
     maxUsers: 10000,
     minWaitMs: 1200,
@@ -26,9 +30,12 @@
   let running = false;
   let aborted = false;
   let activeProfile = null;
+  let activeRunId = null;
+  let runCache = { followers: [], following: [] };
   let lastKnownTotals = { followers: null, following: null };
   let overlay = null;
   const overlayLogs = [];
+  const activeFetchControllers = new Set();
 
   class AbortedError extends Error {
     constructor(reason) {
@@ -166,6 +173,13 @@
       #ft-auto-overlay .ft-log .ft-log-line:last-child { border-bottom: 0; }
       #ft-auto-overlay .ft-log::-webkit-scrollbar { width: 6px; }
       #ft-auto-overlay .ft-log::-webkit-scrollbar-thumb { background: #c8d4dc; border-radius: 3px; }
+      #ft-auto-overlay .ft-data-actions { display: flex; gap: 6px; margin-top: 8px; }
+      #ft-auto-overlay .ft-data-btn {
+        flex: 1; border: 1px solid #c9d8e2; border-radius: 8px; padding: 6px;
+        background: #fff; color: #315163; cursor: pointer; font: 600 10.5px inherit;
+      }
+      #ft-auto-overlay .ft-data-btn:hover:not(:disabled) { background: #edf6fa; }
+      #ft-auto-overlay .ft-data-btn:disabled { opacity: .5; cursor: default; }
     `;
     document.head.appendChild(style);
   }
@@ -194,6 +208,10 @@
           <button id="ft-start" class="ft-btn ft-btn-primary">Iniciar analisis</button>
           <button id="ft-cancel" class="ft-btn ft-btn-secondary" disabled>Cancelar</button>
         </div>
+        <div class="ft-data-actions">
+          <button id="ft-export-history" class="ft-data-btn">Exportar historial</button>
+          <button id="ft-clear-history" class="ft-data-btn">Borrar historial</button>
+        </div>
         <div id="ft-log" class="ft-log"></div>
       </div>
     `;
@@ -210,8 +228,13 @@
       runAnalysis().catch(() => { /* el overlay ya muestra el error */ });
     });
     overlay.querySelector("#ft-cancel").addEventListener("click", () => {
-      if (running) aborted = true;
+      if (running) {
+        aborted = true;
+        activeFetchControllers.forEach((controller) => controller.abort());
+      }
     });
+    overlay.querySelector("#ft-export-history").addEventListener("click", exportCurrentProfileHistory);
+    overlay.querySelector("#ft-clear-history").addEventListener("click", clearCurrentProfileHistory);
     document.body.appendChild(overlay);
     return overlay;
   }
@@ -220,6 +243,8 @@
     if (!overlay) return;
     const start = overlay.querySelector("#ft-start");
     const cancel = overlay.querySelector("#ft-cancel");
+    const exportHistory = overlay.querySelector("#ft-export-history");
+    const clearHistory = overlay.querySelector("#ft-clear-history");
     if (start) {
       start.disabled = isBusy;
       start.textContent = isBusy ? "Ejecutando..." : "Iniciar analisis";
@@ -229,6 +254,8 @@
       cancel.classList.remove("ft-btn-secondary", "ft-btn-danger");
       cancel.classList.add(isBusy ? "ft-btn-danger" : "ft-btn-secondary");
     }
+    if (exportHistory) exportHistory.disabled = isBusy;
+    if (clearHistory) clearHistory.disabled = isBusy;
   }
 
   const overlayCounts = { followers: { current: null, total: null }, following: { current: null, total: null } };
@@ -405,19 +432,33 @@
   }
 
   function storageGet(key) {
-    return new Promise((resolve) => {
-      chrome.storage.local.get([key], (obj) => resolve(obj && obj[key] ? obj[key] : null));
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.get([key], (obj) => {
+        const err = chrome.runtime.lastError;
+        if (err) reject(new Error(`No se pudo leer el historial: ${err.message}`));
+        else resolve(obj && Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null);
+      });
     });
   }
 
   function storageSet(obj) {
-    return new Promise((resolve) => {
-      chrome.storage.local.set(obj, () => resolve());
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set(obj, () => {
+        const err = chrome.runtime.lastError;
+        if (err) reject(new Error(`No se pudo guardar el historial: ${err.message}`));
+        else resolve();
+      });
     });
   }
 
-  function cacheKeyForProfile(profile) {
-    return `ft_cache_${toSafeFilePart(profile)}`;
+  function storageRemove(key) {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.remove([key], () => {
+        const err = chrome.runtime.lastError;
+        if (err) reject(new Error(`No se pudo borrar el historial: ${err.message}`));
+        else resolve();
+      });
+    });
   }
 
   function historyKeyForProfile(profile) {
@@ -425,18 +466,19 @@
   }
 
   function uniqueUsernames(rows) {
-    const byLowercase = new Map();
-    (rows || []).forEach((row) => {
-      const username = row && typeof row.username === "string" ? row.username.trim() : "";
-      if (!username) return;
-      byLowercase.set(username.toLowerCase(), username);
-    });
-    return Array.from(byLowercase.values()).sort((a, b) => a.localeCompare(b));
+    return Core.uniqueUsernames(rows);
   }
 
-  async function compareAndSaveProfileHistory(profile, followersRows, followingRows, capturedAt) {
+  async function compareAndSaveProfileHistory(profile, followersRows, followingRows, capturedAt, completenessState) {
     const key = historyKeyForProfile(profile);
-    const previous = await storageGet(key);
+    let previous = null;
+    let storageError = null;
+    try {
+      previous = await storageGet(key);
+    } catch (error) {
+      storageError = error.message;
+      sendProgress(`${storageError}. El reporte se generara sin comparacion historica.`);
+    }
     const followers = uniqueUsernames(followersRows);
     const following = uniqueUsernames(followingRows);
     const hasPrevious =
@@ -444,82 +486,162 @@
       Array.isArray(previous.followers) &&
       Array.isArray(previous.following);
 
+    const canUpdate = !completenessState || completenessState.complete === true;
     let newFollowers = [];
     let newFollowing = [];
-    if (hasPrevious) {
-      const previousFollowers = new Set(previous.followers.map((u) => String(u).toLowerCase()));
-      const previousFollowing = new Set(previous.following.map((u) => String(u).toLowerCase()));
-      newFollowers = followers.filter((u) => !previousFollowers.has(u.toLowerCase()));
-      newFollowing = following.filter((u) => !previousFollowing.has(u.toLowerCase()));
+    let lostFollowers = [];
+    let lostFollowing = [];
+    if (hasPrevious && canUpdate) {
+      const followerChanges = Core.compareSnapshots(previous.followers, followers);
+      const followingChanges = Core.compareSnapshots(previous.following, following);
+      newFollowers = followerChanges.added;
+      lostFollowers = followerChanges.removed;
+      newFollowing = followingChanges.added;
+      lostFollowing = followingChanges.removed;
     }
 
-    await storageSet({
-      [key]: {
-        profile: String(profile || "").toLowerCase(),
-        followers,
-        following,
-        updatedAt: capturedAt || nowIso(),
-      },
-    });
+    if (!canUpdate) {
+      // Una captura parcial no es evidencia suficiente para afirmar altas o bajas.
+      newFollowers = [];
+      newFollowing = [];
+      lostFollowers = [];
+      lostFollowing = [];
+    }
+    let historyUpdated = false;
+    if (canUpdate && !storageError) {
+      try {
+        await storageSet({
+          [key]: {
+            schemaVersion: 2,
+            profile: String(profile || "").toLowerCase(),
+            followers,
+            following,
+            updatedAt: capturedAt || nowIso(),
+            runId: activeRunId,
+          },
+        });
+        historyUpdated = true;
+      } catch (error) {
+        storageError = error.message;
+        sendProgress(`${storageError}. Los CSV y el reporte se generaran igualmente.`);
+      }
+    } else {
+      if (!storageError) sendProgress("Captura parcial: el historial anterior se conserva sin cambios.");
+    }
 
-    if (hasPrevious) {
+    if (hasPrevious && canUpdate) {
       sendProgress(
         `Comparacion con captura anterior: ${newFollowers.length} nuevos seguidores y ` +
-        `${newFollowing.length} nuevos seguidos.`
+        `${newFollowing.length} nuevos seguidos; ${lostFollowers.length} dejaron de seguirte y ` +
+        `${lostFollowing.length} dejaste de seguir.`
       );
-    } else {
-      sendProgress(`Primera captura de @${profile}: historial guardado como linea base.`);
+    } else if (!hasPrevious) {
+      sendProgress(
+        historyUpdated
+          ? `Primera captura de @${profile}: historial guardado como linea base.`
+          : storageError
+            ? `No se pudo guardar la linea base de @${profile}.`
+            : `Primera captura parcial de @${profile}: no se guardo como linea base.`
+      );
     }
 
-    return { newFollowers, newFollowing, isBaseline: !hasPrevious };
+    return {
+      newFollowers,
+      newFollowing,
+      lostFollowers,
+      lostFollowing,
+      isBaseline: !hasPrevious,
+      captureComplete: canUpdate,
+      historyUpdated,
+      storageError,
+    };
   }
 
   function mergeRowsByUsername(aRows, bRows) {
-    const map = new Map();
-    (aRows || []).forEach((r) => {
-      if (!r || !r.username) return;
-      map.set(r.username, { username: r.username, fullName: r.fullName || "Sin Nombre" });
-    });
-    (bRows || []).forEach((r) => {
-      if (!r || !r.username) return;
-      map.set(r.username, { username: r.username, fullName: r.fullName || "Sin Nombre" });
-    });
-    return Array.from(map.values()).sort((x, y) => x.username.localeCompare(y.username));
+    return Core.mergeRows(aRows, bRows);
   }
 
-  async function mergeWithProfileCache(profile, phaseKey, rows) {
-    const key = cacheKeyForProfile(profile);
-    const cache = (await storageGet(key)) || { followers: [], following: [], updatedAt: null };
-    const prevRows = Array.isArray(cache[phaseKey]) ? cache[phaseKey] : [];
-    const merged = mergeRowsByUsername(prevRows, rows || []);
-    cache[phaseKey] = merged;
-    cache.updatedAt = new Date().toISOString();
-    await storageSet({ [key]: cache });
-    sendProgress(`${phaseKey}: cache acumulada ${merged.length} usuarios`);
+  async function mergeWithRunCache(profile, phaseKey, rows) {
+    void profile;
+    const merged = mergeRowsByUsername(runCache[phaseKey], rows || []);
+    runCache[phaseKey] = merged;
+    sendProgress(`${phaseKey}: ${merged.length} usuarios reunidos en esta ejecucion`);
     return merged;
   }
 
+  async function exportCurrentProfileHistory() {
+    try {
+      const profile = getProfileFromPath();
+      const history = await storageGet(historyKeyForProfile(profile));
+      if (!history) {
+        setOverlay(profile, null, null, "No hay historial para exportar.", "#ffd166");
+        return;
+      }
+      downloadText(
+        `follow_tracker_historial_${toSafeFilePart(profile)}_${nowCompact()}.json`,
+        JSON.stringify(history, null, 2),
+        "application/json;charset=utf-8;"
+      );
+      setOverlay(profile, null, null, "Historial exportado.", "#7de8c6");
+    } catch (error) {
+      setOverlay(getProfileFromPath(), null, null, error.message, "#ff9a9a");
+    }
+  }
+
+  async function clearCurrentProfileHistory() {
+    const profile = getProfileFromPath();
+    if (!confirm(`¿Borrar el historial local de @${profile}? Esta accion no se puede deshacer.`)) return;
+    try {
+      await storageRemove(historyKeyForProfile(profile));
+      setOverlay(profile, null, null, "Historial borrado.", "#7de8c6");
+      appendOverlayLog(`Historial local de @${profile} borrado.`);
+    } catch (error) {
+      setOverlay(profile, null, null, error.message, "#ff9a9a");
+    }
+  }
+
   async function igFetchJson(url, opts) {
+    checkAbort();
     const referer = (opts && opts.referer) || `${location.origin}/`;
-    const maxAttempts = (opts && opts.maxAttempts) || 6;
+    const maxAttempts = (opts && opts.maxAttempts) ?? 6;
+    const timeoutMs = (opts && opts.timeoutMs) ?? 20000;
     let attempt = 0;
     let lastErr = null;
     while (attempt < maxAttempts) {
       attempt += 1;
       let res;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      activeFetchControllers.add(controller);
       try {
         res = await fetch(url, {
           method: "GET",
           credentials: "include",
           headers: { ...getApiHeaders(), referer },
+          signal: controller.signal,
         });
       } catch (netErr) {
+        if (aborted) throw new AbortedError();
+        if (netErr && netErr.name === "AbortError") {
+          const timeoutError = new Error(`Tiempo de espera agotado consultando Instagram (${timeoutMs} ms).`);
+          timeoutError.name = "FetchTimeoutError";
+          lastErr = timeoutError;
+          if (attempt >= maxAttempts) throw timeoutError;
+          sendProgress("Instagram tardo demasiado, reintentando...");
+          await sleep(Math.min(CONFIG.apiMaxBackoffMs, 800 * Math.pow(2, attempt - 1)));
+          checkAbort();
+          continue;
+        }
         lastErr = netErr;
         const wait = Math.min(CONFIG.apiMaxBackoffMs, 800 * Math.pow(2, attempt - 1));
         console.warn(`[FollowTracker] red caida en ${url}:`, netErr);
         if (attempt === 1) sendProgress("Conexion inestable, reintentando...");
         await sleep(wait);
+        checkAbort();
         continue;
+      } finally {
+        clearTimeout(timeoutId);
+        activeFetchControllers.delete(controller);
       }
       if (res.ok) {
         try {
@@ -545,6 +667,7 @@
           sendProgress(`Instagram pidio una pausa, esperando ${Math.round(wait / 1000)}s...`);
         }
         await sleep(wait);
+        checkAbort();
         continue;
       }
       console.warn(`[FollowTracker] HTTP ${res.status} en ${url}`);
@@ -576,8 +699,8 @@
     return {
       id: user.id,
       isPrivate: !!user.is_private,
-      followersCount: (user.edge_followed_by && user.edge_followed_by.count) || null,
-      followingCount: (user.edge_follow && user.edge_follow.count) || null,
+      followersCount: user.edge_followed_by?.count ?? null,
+      followingCount: user.edge_follow?.count ?? null,
     };
   }
 
@@ -628,7 +751,7 @@
       const nextMaxStr = nextMax !== undefined && nextMax !== null && nextMax !== "" ? String(nextMax) : null;
       // Mensaje user-friendly: solo "Seguidores: 200/940 (21%)" sin cursor ni paginas.
       const label = phaseKey === "followers" ? "Seguidores" : "Seguidos";
-      updateCount(phaseKey, out.length, expectedCount || null);
+      updateCount(phaseKey, out.length, expectedCount ?? null);
       if (page === 1 || page % 3 === 0 || added === 0 || (expectedCount && out.length >= expectedCount)) {
         sendProgress(`${label}: ${pctText(out.length, expectedCount)}`);
       }
@@ -699,7 +822,7 @@
       lastKnownTotals.following = info.followingCount;
     }
     sendProgress(
-      `Perfil @${profile}: ${info.followersCount || "?"} seguidores, ${info.followingCount || "?"} seguidos.`
+      `Perfil @${profile}: ${info.followersCount ?? "?"} seguidores, ${info.followingCount ?? "?"} seguidos.`
     );
 
     let followersRowsRaw = [];
@@ -722,9 +845,12 @@
       console.warn("[FollowTracker] following pase inicial fallo:", e);
       sendProgress(`Seguidos: reintentando...`);
     }
-    const followersRows = await mergeWithProfileCache(profile, "followers", followersRowsRaw);
-    const followingRows = await mergeWithProfileCache(profile, "following", followingRowsRaw);
-    if (followersRows.length === 0 && followingRows.length === 0) {
+    const followersRows = await mergeWithRunCache(profile, "followers", followersRowsRaw);
+    const followingRows = await mergeWithRunCache(profile, "following", followingRowsRaw);
+    const expectedAnyPositive =
+      (Number.isFinite(info.followersCount) && info.followersCount > 0) ||
+      (Number.isFinite(info.followingCount) && info.followingCount > 0);
+    if (followersRows.length === 0 && followingRows.length === 0 && expectedAnyPositive) {
       throw new Error("API devolvio 0 usuarios en ambas listas.");
     }
 
@@ -753,7 +879,7 @@
         try {
           checkAbort();
           const retry = await paginateFriendshipApi(info.id, phaseKey, expected, session.dsUserId, profile);
-          rows = await mergeWithProfileCache(profile, phaseKey, retry);
+          rows = await mergeWithRunCache(profile, phaseKey, retry);
           updateCount(phaseKey, rows.length, expected);
           const delta = rows.length - lastSize;
           sendProgress(`${label}: ${pctText(rows.length, expected)} (+${delta} nuevos)`);
@@ -807,24 +933,25 @@
 
     // Solo abortamos si AMBAS estan vacias o muy pobres. Si tenemos al menos 30%
     // en alguna, preferimos quedarnos en API (UI seria mas lento y peor).
-    const tooLow = (a, e) => Number.isFinite(e) && e > 0 && a < Math.max(5, Math.floor(e * 0.3));
+    const tooLow = Core.isApiResultTooLow;
+    const bothExplicitlyZero = info.followersCount === 0 && info.followingCount === 0;
     if (
-      followersRows.length === 0 && followingRows.length === 0 ||
+      (followersRows.length === 0 && followingRows.length === 0 && !bothExplicitlyZero) ||
       (tooLow(followersRows.length, info.followersCount) && tooLow(followingRows.length, info.followingCount))
     ) {
       throw new Error(
-        `API entrego muy poco (${followersRows.length}/${info.followersCount || "?"} y ${followingRows.length}/${info.followingCount || "?"}). Cayendo a UI.`
+        `API entrego muy poco (${followersRows.length}/${info.followersCount ?? "?"} y ${followingRows.length}/${info.followingCount ?? "?"}). Cayendo a UI.`
       );
     }
 
     const ts = nowIso();
     const safeProfile = toSafeFilePart(profile);
-    const followersCsvName = `ig_auto_${safeProfile}_followers_${Date.now()}.csv`;
+    const followersCsvName = Core.buildCsvFilename(profile, "followers", activeRunId, Date.now());
     const followersCsv = buildCsvFromRows(followersRows, ts);
     downloadText(followersCsvName, "﻿" + followersCsv, "text/csv;charset=utf-8;");
     sendProgress(`Descargado: lista de seguidores (${followersRows.length}).`);
 
-    const followingCsvName = `ig_auto_${safeProfile}_following_${Date.now()}.csv`;
+    const followingCsvName = Core.buildCsvFilename(profile, "following", activeRunId, Date.now());
     const followingCsv = buildCsvFromRows(followingRows, ts);
     downloadText(followingCsvName, "﻿" + followingCsv, "text/csv;charset=utf-8;");
     sendProgress(`Descargado: lista de seguidos (${followingRows.length}).`);
@@ -849,11 +976,22 @@
       followers: Number.isFinite(info.followersCount) ? info.followersCount : followersRows.length,
       following: Number.isFinite(info.followingCount) ? info.followingCount : followingRows.length,
     };
+    const followersComplete = Core.completeness(
+      followersRows.length,
+      info.followersCount,
+      CONFIG.apiCompletenessRatio
+    );
+    const followingComplete = Core.completeness(
+      followingRows.length,
+      info.followingCount,
+      CONFIG.apiCompletenessRatio
+    );
     const activity = await compareAndSaveProfileHistory(
       profile,
       followersRows,
       followingRows,
-      ts
+      ts,
+      { complete: followersComplete.complete && followingComplete.complete }
     );
     const reportHtml = buildExcelHtml(profile, comparison, ts, totalsApi, activity);
     const reportName = `ig_auto_${safeProfile}_seguidores_vs_seguidos_${nowCompact()}.xls`;
@@ -862,19 +1000,11 @@
   }
 
   function toSafeFilePart(text) {
-    return String(text || "")
-      .replace(/[^a-zA-Z0-9._-]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .toLowerCase();
+    return Core.safeProfile(text);
   }
 
   function escapeCsvValue(value) {
-    const s = String(value ?? "");
-    if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
+    return Core.escapeCsvValue(value);
   }
 
   function normalizeUsernameCandidate(text) {
@@ -958,7 +1088,7 @@
   }
 
   function onProfilePage() {
-    if (!window.location.hostname.includes("instagram.com")) return false;
+    if (!Core.isInstagramHostname(window.location.hostname)) return false;
     const parts = window.location.pathname.split("/").filter(Boolean);
     if (parts.length === 0) return false;
     const first = parts[0];
@@ -1349,6 +1479,7 @@
     // Barrido lento para listas virtualizadas: recorre en pasos pequenos
     // para evitar saltarse celdas que cargan tarde.
     let totalAdded = 0;
+    checkAbort();
     container.scrollTop = 0;
     await sleep(700);
     totalAdded += extractUsers(container, map, phaseKey);
@@ -1356,6 +1487,7 @@
     const step = Math.max(180, Math.floor(container.clientHeight * 0.35));
     let guard = 0;
     while (guard < 2500) {
+      checkAbort();
       const before = container.scrollTop;
       container.scrollTop = Math.min(container.scrollTop + step, container.scrollHeight);
       container.dispatchEvent(new WheelEvent("wheel", { deltaY: step, bubbles: true }));
@@ -1372,6 +1504,7 @@
     let totalAdded = 0;
     const passes = 2;
     for (let p = 1; p <= passes; p += 1) {
+      checkAbort();
       container.scrollTop = 0;
       await sleep(900);
       totalAdded += extractUsers(container, map, phaseKey);
@@ -1379,6 +1512,7 @@
       const step = Math.max(120, Math.floor(container.clientHeight * 0.22));
       let guard = 0;
       while (guard < 5000) {
+        checkAbort();
         const before = container.scrollTop;
         container.scrollTop = Math.min(container.scrollTop + step, container.scrollHeight);
         container.dispatchEvent(new WheelEvent("wheel", { deltaY: step, bubbles: true }));
@@ -1422,6 +1556,7 @@
     let initialAnchors = initialScope.querySelectorAll("a[href]").length;
     let hydrationWait = 0;
     while (hydrationWait < 12) {
+      checkAbort();
       await sleep(350);
       extractUsers(container, data, phase.key);
       updateCount(phase.key, data.size, null);
@@ -1448,6 +1583,7 @@
       const jump = Math.max(700, Math.floor((container.clientHeight || 600) * 0.8));
       // Micro-scroll en 3 pasos para no saltar filas virtualizadas.
       for (let i = 0; i < 3; i += 1) {
+        checkAbort();
         const mini = Math.floor(jump / 3);
         container.scrollTop = Math.min(container.scrollTop + mini, container.scrollHeight);
         if (typeof container.scrollBy === "function") container.scrollBy(0, mini);
@@ -1473,6 +1609,7 @@
         await sleep(700);
         const mini = Math.max(160, Math.floor((container.clientHeight || 600) * 0.25));
         for (let k = 0; k < 3; k += 1) {
+          checkAbort();
           container.scrollTop = Math.min(container.scrollTop + mini, container.scrollHeight);
           await sleep(260);
           extractUsers(container, data, phase.key);
@@ -1480,7 +1617,7 @@
       }
 
       const added = extractUsers(container, data, phase.key);
-      updateCount(phase.key, data.size, expectedCount || null);
+      updateCount(phase.key, data.size, expectedCount ?? null);
       setOverlay(profile, null, null, `${phaseLabel}...`, "#a2f3a6");
       if (added > 0) {
         sendProgress(`${lbl}: ${pctText(data.size, expectedCount)}`);
@@ -1538,7 +1675,7 @@
           if (clearlyIncomplete) {
             sendProgress(`${lbl}: ultimo intento (${pctText(data.size, expectedCount)})...`);
             await deepRescan(container, data, phase.key);
-            updateCount(phase.key, data.size, expectedCount || null);
+            updateCount(phase.key, data.size, expectedCount ?? null);
             if (data.size < Math.floor(expectedCount * 0.98)) {
               sendProgress(`${lbl}: ${pctText(data.size, expectedCount)} (IG no entrega mas).`);
             } else {
@@ -1559,24 +1696,13 @@
       "Usuario,Nombre,Timestamp",
       ...rows.map((r) => `${escapeCsvValue(r.username)},${escapeCsvValue(r.fullName)},${ts}`),
     ].join("\n");
-    const filename = `ig_auto_${toSafeFilePart(profile)}_${phase.key}_${Date.now()}.csv`;
+    const filename = Core.buildCsvFilename(profile, phase.key, activeRunId, Date.now());
     downloadText(filename, "﻿" + csv, "text/csv;charset=utf-8;");
     return { phase: phase.key, rows, filename, scrapeTimestamp: ts };
   }
 
   function buildComparison(followersRows, followingRows) {
-    const followersSet = new Set(followersRows.map((r) => r.username));
-    const followingSet = new Set(followingRows.map((r) => r.username));
-
-    // Reglas:
-    // Nos seguimos: en ambos sets
-    // No lo sigo: me sigue pero yo no lo sigo => followers - following
-    // No me sigue: yo lo sigo pero el no me sigue => following - followers
-    const nos = [...followersSet].filter((u) => followingSet.has(u)).sort();
-    const noLoSigo = [...followersSet].filter((u) => !followingSet.has(u)).sort();
-    const noMeSigue = [...followingSet].filter((u) => !followersSet.has(u)).sort();
-
-    return { nos, noLoSigo, noMeSigue };
+    return Core.buildRelationshipComparison(followersRows, followingRows);
   }
 
   function buildExcelHtml(profile, comparison, scrapeTime, totals, activity) {
@@ -1585,12 +1711,16 @@
     const noMeSigue = comparison.noMeSigue;
     const newFollowers = activity && Array.isArray(activity.newFollowers) ? activity.newFollowers : [];
     const newFollowing = activity && Array.isArray(activity.newFollowing) ? activity.newFollowing : [];
+    const lostFollowers = activity && Array.isArray(activity.lostFollowers) ? activity.lostFollowers : [];
+    const lostFollowing = activity && Array.isArray(activity.lostFollowing) ? activity.lostFollowing : [];
     const maxLen = Math.max(
       nos.length,
       noLoSigo.length,
       noMeSigue.length,
       newFollowers.length,
       newFollowing.length,
+      lostFollowers.length,
+      lostFollowing.length,
       1
     );
     const title = "Seguidores vs Seguidos (" + profile + ")";
@@ -1601,8 +1731,14 @@
     if (totalFollowers != null) subtitleParts.push(`Total seguidores: ${totalFollowers}`);
     if (totalFollowing != null) subtitleParts.push(`Total seguidos: ${totalFollowing}`);
     if (scrapeDateFmt) subtitleParts.push(`Scrapeo: ${scrapeDateFmt}`);
-    if (activity && activity.isBaseline) {
-      subtitleParts.push("Primera captura: linea base para futuras comparaciones");
+    if (activity && activity.storageError) {
+      subtitleParts.push("No se pudo guardar el historial local");
+    } else if (activity && !activity.captureComplete) {
+      subtitleParts.push("Captura parcial: no se calcularon cambios ni se modifico el historial");
+    } else if (activity && activity.isBaseline) {
+      subtitleParts.push(
+        "Primera captura: linea base para futuras comparaciones"
+      );
     } else if (activity) {
       subtitleParts.push("Comparado con la captura anterior de este perfil");
     }
@@ -1627,8 +1763,10 @@
       r += `<Cell ss:Index="6" ss:StyleID="${s}"><Data ss:Type="String">${esc(noMeSigue[i] || "")}</Data></Cell>`;
       r += `<Cell ss:Index="8" ss:StyleID="${s}"><Data ss:Type="String">${esc(newFollowers[i] || "")}</Data></Cell>`;
       r += `<Cell ss:Index="10" ss:StyleID="${s}"><Data ss:Type="String">${esc(newFollowing[i] || "")}</Data></Cell>`;
+      r += `<Cell ss:Index="12" ss:StyleID="${s}"><Data ss:Type="String">${esc(lostFollowers[i] || "")}</Data></Cell>`;
+      r += `<Cell ss:Index="14" ss:StyleID="${s}"><Data ss:Type="String">${esc(lostFollowing[i] || "")}</Data></Cell>`;
       if (i === 0) {
-        r += `<Cell ss:Index="12" ss:StyleID="d"><Data ss:Type="String">${esc(scrapeDateFmt)}</Data></Cell>`;
+        r += `<Cell ss:Index="16" ss:StyleID="d"><Data ss:Type="String">${esc(scrapeDateFmt)}</Data></Cell>`;
       }
       r += "</Row>";
       dataRows.push(r);
@@ -1650,12 +1788,14 @@
       `<Style ss:ID="h4"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#92D050" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
       `<Style ss:ID="h5"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#00B0F0" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
       `<Style ss:ID="h6"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#6A1B9A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      `<Style ss:ID="h7"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#9C2F2F" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
+      `<Style ss:ID="h8"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#795548" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/>${bdr}</Style>`,
       '<Style ss:ID="sub"><Font ss:Size="12" ss:Bold="1" ss:Color="#3A4B57"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>',
       `<Style ss:ID="d">${bdr}</Style>`,
       `<Style ss:ID="ds"><Interior ss:Color="#F2F2F2" ss:Pattern="Solid"/>${bdr}</Style>`,
       "</Styles>",
       '<Worksheet ss:Name="Seguimiento Instagram">',
-      `<Table ss:ExpandedColumnCount="12" ss:ExpandedRowCount="${7 + maxLen}">`,
+      `<Table ss:ExpandedColumnCount="16" ss:ExpandedRowCount="${7 + maxLen}">`,
       '<Column ss:Index="1" ss:Width="37.5"/>',
       '<Column ss:Index="2" ss:Width="225"/>',
       '<Column ss:Index="3" ss:Width="75"/>',
@@ -1668,10 +1808,14 @@
       '<Column ss:Index="10" ss:Width="225"/>',
       '<Column ss:Index="11" ss:Width="75"/>',
       '<Column ss:Index="12" ss:Width="180"/>',
-      `<Row ss:Height="25"><Cell ss:Index="2" ss:MergeAcross="10" ss:MergeDown="2" ss:StyleID="t"><Data ss:Type="String">${esc(title)}</Data></Cell></Row>`,
+      '<Column ss:Index="13" ss:Width="75"/>',
+      '<Column ss:Index="14" ss:Width="225"/>',
+      '<Column ss:Index="15" ss:Width="75"/>',
+      '<Column ss:Index="16" ss:Width="180"/>',
+      `<Row ss:Height="25"><Cell ss:Index="2" ss:MergeAcross="14" ss:MergeDown="2" ss:StyleID="t"><Data ss:Type="String">${esc(title)}</Data></Cell></Row>`,
       '<Row ss:Height="25"/>',
       '<Row ss:Height="25"/>',
-      `<Row ss:Height="20"><Cell ss:Index="2" ss:MergeAcross="10" ss:StyleID="sub"><Data ss:Type="String">${esc(subtitle)}</Data></Cell></Row>`,
+      `<Row ss:Height="20"><Cell ss:Index="2" ss:MergeAcross="14" ss:StyleID="sub"><Data ss:Type="String">${esc(subtitle)}</Data></Cell></Row>`,
       "<Row/>",
       "<Row/>",
       "<Row>",
@@ -1680,7 +1824,9 @@
       `<Cell ss:Index="6" ss:StyleID="h3"><Data ss:Type="String">No me sigue (${noMeSigue.length})</Data></Cell>`,
       `<Cell ss:Index="8" ss:StyleID="h4"><Data ss:Type="String">Nuevos Seguidores (${newFollowers.length})</Data></Cell>`,
       `<Cell ss:Index="10" ss:StyleID="h5"><Data ss:Type="String">Nuevos Seguidos (${newFollowing.length})</Data></Cell>`,
-      '<Cell ss:Index="12" ss:StyleID="h6"><Data ss:Type="String">Ultimo Scrapeo</Data></Cell>',
+      `<Cell ss:Index="12" ss:StyleID="h6"><Data ss:Type="String">Dejaron de seguirte (${lostFollowers.length})</Data></Cell>`,
+      `<Cell ss:Index="14" ss:StyleID="h7"><Data ss:Type="String">Dejaste de seguir (${lostFollowing.length})</Data></Cell>`,
+      '<Cell ss:Index="16" ss:StyleID="h8"><Data ss:Type="String">Ultimo Scrapeo</Data></Cell>',
       "</Row>",
       ...dataRows,
       "</Table>",
@@ -1700,6 +1846,8 @@
     running = true;
     aborted = false;
     activeProfile = getProfileFromPath();
+    activeRunId = Core.makeRunId();
+    runCache = { followers: [], following: [] };
     lastKnownTotals = { followers: null, following: null };
     sendBadge("RUN", "#1fa37d");
     setOverlayButtonsBusy(true);
@@ -1759,9 +1907,8 @@
           await sleep(CONFIG.phaseDelayMs);
         }
 
-        const comparison = buildComparison(phaseResults.followers.rows, phaseResults.following.rows);
-        const mergedFollowersRows = await mergeWithProfileCache(profile, "followers", phaseResults.followers.rows);
-        const mergedFollowingRows = await mergeWithProfileCache(profile, "following", phaseResults.following.rows);
+        const mergedFollowersRows = await mergeWithRunCache(profile, "followers", phaseResults.followers.rows);
+        const mergedFollowingRows = await mergeWithRunCache(profile, "following", phaseResults.following.rows);
         const mergedComparison = buildComparison(mergedFollowersRows, mergedFollowingRows);
         const scrapeTime = phaseResults.following.scrapeTimestamp || nowIso();
         const totalsUi = {
@@ -1772,7 +1919,20 @@
           profile,
           mergedFollowersRows,
           mergedFollowingRows,
-          scrapeTime
+          scrapeTime,
+          {
+            complete:
+              Core.completeness(
+                mergedFollowersRows.length,
+                phaseExpected.followers,
+                CONFIG.apiCompletenessRatio
+              ).complete &&
+              Core.completeness(
+                mergedFollowingRows.length,
+                phaseExpected.following,
+                CONFIG.apiCompletenessRatio
+              ).complete,
+          }
         );
         const reportHtml = buildExcelHtml(profile, mergedComparison, scrapeTime, totalsUi, activity);
         const reportName = `ig_auto_${toSafeFilePart(profile)}_seguidores_vs_seguidos_${nowCompact()}.xls`;
@@ -1806,6 +1966,8 @@
     } finally {
       running = false;
       activeProfile = null;
+      activeRunId = null;
+      runCache = { followers: [], following: [] };
       aborted = false;
       setOverlayButtonsBusy(false);
     }
@@ -1816,6 +1978,7 @@
     if (msg.type === "CANCEL_ANALYSIS") {
       if (running) {
         aborted = true;
+        activeFetchControllers.forEach((controller) => controller.abort());
         sendResponse({ ok: true });
       } else {
         sendResponse({ ok: false, error: "No hay analisis en curso." });

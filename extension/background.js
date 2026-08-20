@@ -1,5 +1,12 @@
 chrome.runtime.onInstalled.addListener(() => {
   chrome.action.setBadgeBackgroundColor({ color: "#1fa37d" });
+  // Versiones anteriores guardaban una union permanente de usuarios en
+  // ft_cache_*. Ya no se usa porque conservaba bajas como si siguieran activas.
+  chrome.storage.local.get(null, (items) => {
+    if (chrome.runtime.lastError || !items) return;
+    const legacyKeys = Object.keys(items).filter((key) => key.startsWith("ft_cache_"));
+    if (legacyKeys.length > 0) chrome.storage.local.remove(legacyKeys);
+  });
 });
 
 function sendMessageToTab(tabId, message) {
@@ -19,7 +26,7 @@ async function ensureContentLoaded(tabId) {
   const ping = await sendMessageToTab(tabId, { type: "PING" });
   if (ping.ok) return ping;
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["core.js", "content.js"] });
   } catch (e) {
     return { ok: false, error: `No se pudo inyectar content.js: ${e.message || e}` };
   }

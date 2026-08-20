@@ -3,6 +3,8 @@
 // 1) Seguidores
 // 2) Seguidos
 // Requisito: estar en el perfil de la cuenta objetivo.
+// LEGACY: la extension/ es el flujo recomendado. Este archivo se conserva
+// para compatibilidad con instalaciones anteriores.
 
 const CONFIG = {
   MAX_USERS: 10000,
@@ -20,6 +22,13 @@ const PHASES = [
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isInstagramHostname(hostname) {
+  const core = typeof globalThis !== "undefined" && globalThis.FollowTrackerCore;
+  if (core && typeof core.isInstagramHostname === "function") return core.isInstagramHostname(hostname);
+  const host = String(hostname || "").toLowerCase().replace(/\.$/, "");
+  return host === "instagram.com" || host === "www.instagram.com";
 }
 
 function randomSleep() {
@@ -40,6 +49,22 @@ function sanitizeFilenamePart(text) {
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "")
     .toLowerCase();
+}
+
+function makeRunId() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  const stamp =
+    `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+    `t${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`;
+  return `${stamp}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function escapeCsvValue(value) {
+  let text = String(value == null ? "" : value);
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  if (/[",\r\n]/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
+  return text;
 }
 
 function createUI() {
@@ -63,7 +88,7 @@ function createUI() {
     box-shadow: 0 8px 24px rgba(0,0,0,.35);
   `;
   panel.innerHTML = `
-    <div style="font-size:15px;font-weight:700;margin-bottom:8px;color:#57c6ff;">IG Auto Scraper</div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:8px;color:#57c6ff;">IG Auto Scraper (legacy)</div>
     <div style="font-size:13px;margin-bottom:4px;">Perfil: <span id="ig-profile">-</span></div>
     <div style="font-size:13px;margin-bottom:4px;">Fase: <span id="ig-phase">-</span></div>
     <div style="font-size:13px;margin-bottom:4px;">Usuarios: <span id="ig-count">0</span></div>
@@ -81,6 +106,7 @@ class AutoInstagramScraper {
     this.data = new Map();
     this.phase = null;
     this.profile = profileUsernameFromPath();
+    this.runId = makeRunId();
     this.batchCounter = 0;
     this.downloadedFiles = [];
     this.bindUI();
@@ -117,7 +143,7 @@ class AutoInstagramScraper {
   }
 
   isProfilePage() {
-    if (!window.location.hostname.includes("instagram.com")) return false;
+    if (!isInstagramHostname(window.location.hostname)) return false;
     const parts = window.location.pathname.split("/").filter(Boolean);
     if (parts.length !== 1) return false;
     const reserved = new Set(["explore", "accounts", "reels", "direct", "stories"]);
@@ -257,11 +283,20 @@ class AutoInstagramScraper {
     const safeProfile = sanitizeFilenamePart(this.profile);
     const headers = "Usuario,Nombre,Timestamp\n";
     const nowIso = new Date().toISOString();
-    const csv = headers + rows.map((r) => `${r},${nowIso}`).join("\n");
+    const csv =
+      headers +
+      rows
+        .map((r) => {
+          const comma = r.indexOf(",");
+          const username = comma >= 0 ? r.slice(0, comma) : r;
+          const fullName = comma >= 0 ? r.slice(comma + 1) : "Sin Nombre";
+          return `${escapeCsvValue(username)},${escapeCsvValue(fullName)},${escapeCsvValue(nowIso)}`;
+        })
+        .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const filename = `ig_auto_${safeProfile}_${phaseKey}_${Date.now()}.csv`;
+    const filename = `ig_auto_${safeProfile}_${phaseKey}_${this.runId}_${Date.now()}.csv`;
     a.href = url;
     a.download = filename;
     a.style.display = "none";
@@ -337,6 +372,7 @@ class AutoInstagramScraper {
 
     this.isRunning = true;
     this.profile = profileUsernameFromPath();
+    this.runId = makeRunId();
     this.setProfile(this.profile);
     this.setStatus("Iniciando flujo automatico...");
 
@@ -382,7 +418,7 @@ class AutoInstagramScraper {
 }
 
 async function initializeAutoScraper() {
-  if (!window.location.hostname.includes("instagram.com")) {
+  if (!isInstagramHostname(window.location.hostname)) {
     alert("Este script solo funciona en Instagram.com");
     return;
   }

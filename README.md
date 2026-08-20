@@ -10,21 +10,18 @@ Herramienta para comparar seguidores y seguidos de Instagram.
 
 - Flujo `1 solo EXE` con modo `AUTO 1-click (esperar)`.
 - Extensión de navegador `1 clic` sin consola (`extension/`).
+- Historial por perfil con altas y bajas: nuevos seguidores, nuevos seguidos, dejaron de seguirte y dejaste de seguir.
+- Capturas identificadas por `run_id`, sin mezclar archivos de ejecuciones diferentes.
+- Las capturas parciales no reemplazan una línea base completa.
 - Carpeta fija `yo/` para tus JSON descargados de Instagram.
 - Scraper automático por perfil externo: primero `followers`, luego `following`.
 - En extensión: panel flotante fijo durante ejecución, con botón `X` para cerrarlo manualmente.
 - Detección del total esperado del perfil (`esperado=<n>`) y recuperación automática si hay estancamiento.
 - Reporte final con `Ultimo Scrapeo`.
 
-## Uso 0 pasos técnicos (Extensión)
+## Instalación guiada de la extensión
 
 Recomendado para usuario final.
-
-### Video tutorial
-
-[![Ver tutorial en YouTube](https://img.shields.io/badge/YouTube-Ver%20tutorial-red?logo=youtube&logoColor=white)](https://youtu.be/TU_VIDEO_ID)
-
-> Reemplaza `TU_VIDEO_ID` con el ID de tu video unlisted.
 
 ### Pasos con capturas
 
@@ -35,7 +32,7 @@ Recomendado para usuario final.
 | 3 | Pulsa **Cargar descomprimida** y selecciona la carpeta `extension/` | ![Paso 3](docs/03-load-unpacked.png) |
 | 4 | Fija el icono de la extensión en la barra | ![Paso 4](docs/04-pin-icon.png) |
 | 5 | Abre Instagram en el perfil objetivo y pulsa el icono de la extensión. El panel flotante aparece arriba a la derecha. Click en **Iniciar análisis** | ![Paso 5](docs/05-overlay.png) |
-| 6 | Espera a que termine. Los archivos se descargan automáticamente | ![Paso 6](docs/06-result.png) |
+| 6 | Espera a que termine. Los archivos se descargan automáticamente | ![Paso 6](docs/09-analysis-finished.png) |
 
 > Las imágenes están en `docs/`. Las capturas de instalación que todavía no se hayan agregado aparecerán como un cuadro vacío en GitHub.
 
@@ -65,11 +62,12 @@ Qué hace automáticamente:
 4. Abre `following`.
 5. Repite extracción.
 6. Descarga resultados.
+7. Guarda una línea base local solo si ambas listas tienen cobertura suficiente.
 
 Archivos descargados:
 
-- `ig_auto_<perfil>_followers_<ts>.csv`
-- `ig_auto_<perfil>_following_<ts>.csv`
+- `ig_auto_<perfil>_followers_<run_id>_<ts>.csv`
+- `ig_auto_<perfil>_following_<run_id>_<ts>.csv`
 - `ig_auto_<perfil>_seguidores_vs_seguidos_<fecha>.xls` (compatible con Excel)
 
 Notas:
@@ -80,6 +78,15 @@ Notas:
 - La extensión intenta primero el modo **API** (`/api/v1/friendships/...`). Si Instagram responde con errores `429`/`503`, espera y reintenta automáticamente. Si la API falla o devuelve demasiado poco, cambia al modo **UI** (modal o ruta `/usuario/followers/`) y comienza un nuevo recorrido de las listas.
 - Cuando se ejecutan primero los reintentos de API y después el recorrido por UI, el análisis puede demorar considerablemente más porque se utilizaron ambos métodos.
 - El objetivo es obtener la mayor cobertura posible, pero no se garantiza siempre el 100%: Instagram puede mostrar un contador diferente de la cantidad de usuarios que realmente entrega. La extensión informa esa diferencia y conserva los usuarios obtenidos.
+- Si una captura no llega al umbral de cobertura, el reporte se genera pero el historial anterior no se reemplaza. Así se evitan falsos “nuevos seguidores” en la próxima ejecución.
+- Los botones **Exportar historial** y **Borrar historial** administran los datos locales del perfil abierto.
+
+### Privacidad de los datos
+
+- Las listas y el historial se procesan en tu equipo y se guardan en el almacenamiento local de la extensión.
+- La extensión no envía el historial a servidores propios.
+- Al desinstalar la extensión o usar **Borrar historial**, se elimina la línea base local correspondiente.
+- Los CSV y reportes descargados quedan en tu carpeta de descargas y debes borrarlos manualmente si ya no los necesitas.
 
 ### Rendimiento y tiempo de espera
 
@@ -130,9 +137,9 @@ Las pruebas deberían incluir, como mínimo, una cuenta pequeña, una mediana y 
 
 1. Crea carpeta `yo` junto al EXE.
 2. Copia:
-- `yo/followers_1.json`
-- `yo/following.json`
-3. Pulsa `Usar mi cuenta (JSON)`.
+- uno o varios `yo/followers*.json`
+- uno o varios `yo/following*.json`
+3. Pulsa `Usar mi cuenta (JSON)` e indica el perfil al que pertenece la descarga.
 
 Salida:
 
@@ -144,6 +151,8 @@ Salida:
 2. Deja el EXE abierto.
 3. En Instagram perfil objetivo, ejecuta `smart_scraper.js`.
 4. El EXE detecta los CSV nuevos y genera salida automática.
+
+> Este modo se mantiene por compatibilidad. Para instalaciones nuevas se recomienda usar directamente la extensión, que genera los dos CSV y el reporte sin ejecutar código manualmente.
 
 Salida en carpeta por usuario:
 
@@ -158,6 +167,18 @@ pip install -r requirements.txt
 python comparar_ig.py
 ```
 
+Verificaciones locales:
+
+```bash
+python -m unittest discover -s tests -v
+npm test
+npm run check
+npm run e2e:fixture
+npm run e2e
+```
+
+`npm run e2e:fixture` valida sin navegador el fixture determinista. `npm run e2e` ejecuta la extensión real en Chrome sobre rutas de Instagram interceptadas, sin iniciar sesión ni acceder a la red. Incluye perfiles normales, cuentas vacías y cancelación durante una petición lenta. Ver [`tests/e2e/README.md`](tests/e2e/README.md).
+
 ## Cómo obtener JSON oficiales de tu cuenta
 
 En Instagram:
@@ -170,12 +191,24 @@ En Instagram:
 ## Generar EXE
 
 ```bash
-pyinstaller --noconfirm comparar_ig.spec
+pip install -r requirements-dev.txt
+./build.ps1
 ```
 
-Salida:
+Salidas:
 
 - `dist/comparar_ig.exe`
+- `dist/follow-tracker-extension.zip`
+
+Cada push y pull request ejecuta las pruebas en GitHub Actions. Al publicar un tag `v*`, el workflow de release crea el EXE, empaqueta la extensión y adjunta ambos artefactos a un GitHub Release.
+
+## Estructura técnica
+
+- `extension/core.js`: comparación, cobertura, nombres de archivos y CSV; es independiente del navegador y tiene pruebas unitarias.
+- `extension/content.js`: integración con Instagram, API, fallback UI y panel flotante.
+- `comparar_ig.py`: lectura JSON/CSV, historial y generación del XLSX.
+- `auto_watcher.py`: compatibilidad con el flujo legacy; reutiliza la lógica de `comparar_ig.py`.
+- `smart_scraper.js` y `analizar_csv.py`: entradas de compatibilidad para instalaciones anteriores.
 
 ## Licencia
 
