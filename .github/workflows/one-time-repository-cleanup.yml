@@ -1,0 +1,69 @@
+name: One-time repository cleanup
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/one-time-repository-cleanup.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Render fake-data dashboard screenshot
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { chromium } = require('@playwright/test');
+
+          (async () => {
+            const html = fs.readFileSync('docs/dashboard-demo.html', 'utf8');
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+            await page.setContent(html, { waitUntil: 'load' });
+            await page.screenshot({ path: 'docs/dashboard-demo.png', fullPage: false });
+            await browser.close();
+          })();
+          NODE
+
+      - name: Delete every legacy GitHub Release and version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
+            [ -z "$tag" ] && continue
+            gh release delete "$tag" --cleanup-tag --yes
+          done
+
+          git fetch --tags --force
+          for tag in $(git tag -l 'v*'); do
+            git push origin ":refs/tags/$tag" || true
+          done
+
+      - name: Commit generated screenshot to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- docs/dashboard-demo.png
+          if git diff --cached --quiet; then
+            echo "Screenshot already up to date."
+          else
+            git commit -m "docs: add fake-data dashboard screenshot"
+            git push origin HEAD:main
+          fi
