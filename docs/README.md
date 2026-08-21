@@ -1,42 +1,14 @@
-# Guia visual
+# Capturas de la guia
 
-Esta carpeta contiene capturas de pantalla referenciadas desde el README principal.
+Esta carpeta conserva las capturas usadas para explicar la instalacion manual y el flujo de analisis sobre Instagram.
 
-## Regresión E2E local
+- `01-extensions.png`: pagina de extensiones.
+- `02-dev-mode.png`: activacion del modo desarrollador.
+- `03-load-unpacked.png`: carga de la carpeta `extension/`.
+- `04-pin-icon.png`: fijar el icono.
+- `05-overlay.png`: panel flotante.
+- `07-profile-open.png`: perfil abierto.
+- `08-analysis-running.png`: analisis en progreso.
+- `09-analysis-finished.png`: analisis finalizado.
 
-La página mock para pruebas de la extensión está en [`../tests/fixtures/instagram-profile.html`](../tests/fixtures/instagram-profile.html). Ejecutá `npm run e2e:fixture` desde la raíz para comprobar su contrato sin instalar un navegador. Para una prueba de navegador y de la extensión cargada, seguí [`../tests/e2e/README.md`](../tests/e2e/README.md); se puede interceptar `https://www.instagram.com/demo_profile/` hacia el fixture, por lo que no requiere login ni tráfico real.
-
-## Como reemplazar las imagenes
-
-Subi las capturas con estos nombres exactos para que el README las muestre automaticamente:
-
-| Archivo | Que mostrar |
-| --- | --- |
-| `01-extensions.png` | Pantalla `chrome://extensions` o `edge://extensions` recien abierta |
-| `02-dev-mode.png` | Toggle "Modo desarrollador" activado (esquina superior derecha) |
-| `03-load-unpacked.png` | Boton "Cargar descomprimida" + dialogo seleccionando la carpeta `extension/` |
-| `04-pin-icon.png` | Icono de la extension fijado en la barra de Chrome/Edge |
-| `05-overlay.png` | Panel flotante en Instagram con boton "Iniciar analisis" |
-| `06-result.png` | Captura opcional de la carpeta de descargas con los 3 archivos generados (2 CSV + 1 XLS) |
-| `07-profile-open.png` | Perfil objetivo abierto antes de mostrar el panel |
-| `08-analysis-running.png` | Panel mostrando el progreso durante el analisis |
-| `09-analysis-finished.png` | Panel al 100%, con el modo utilizado y el historial guardado |
-
-## Recomendaciones
-
-- Tamaño: 1280x720 o 1920x1080 (16:9) para que se vea bien en GitHub.
-- Formato PNG (mejor que JPG para capturas de UI con texto).
-- Marcá con flechas/recuadros rojos donde tiene que clickear el usuario. Tools sugeridas:
-  - [ShareX](https://getsharex.com/) (Windows, gratis, anotacion incluida)
-  - [Greenshot](https://getgreenshot.org/) (Windows, gratis, simple)
-  - Snipping Tool de Windows + cualquier editor de imagen
-- Si haces GIFs en lugar de capturas (mejor para mostrar interaccion), usa `.gif` y mantene el peso bajo 2 MB con [Gifski](https://gif.ski/).
-
-## Video opcional
-
-El link del video va en el README principal. Para grabarlo:
-
-- Usa [OBS Studio](https://obsproject.com/) (gratis) o el grabador integrado de Windows (`Win + G`).
-- 1-2 minutos basta: pantalla `chrome://extensions` -> activar dev mode -> cargar descomprimida -> click en icono -> demo en Instagram.
-- Sube a YouTube como **No listado** (Unlisted), no Public. El link se comparte solo con quien tenga la URL.
-- Agrega el enlace al README principal únicamente cuando el video definitivo esté publicado.
+Las capturas del panel flotante corresponden a la experiencia de extraccion. El dashboard de la version 2 vive en `extension/dashboard.html`, se abre automaticamente al terminar un analisis y tambien puede abrirse desde el popup.

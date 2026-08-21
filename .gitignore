@@ -1,44 +1,31 @@
-# Data files (Sensitive)
-followers_1.json
-following.json
-seguidores_vs_seguidos.xlsx
-remplazar los 3 archvios de arriba para nueva info.txt
-
-# PyInstaller / Build artifacts
-build/
-dist/
-.dist/
-*.spec
-*.exe
-!comparar_ig.spec
-!icon.ico
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-env/
-venv/
-ENV/
-
-# Node / browser test artifacts
+# Dependencies and local tooling
 node_modules/
 .playwright-cli/
+
+# Test output
 output/playwright/
+playwright-report/
+test-results/
 
-# Images and Icons
-*.png
-*.jpg
-*.jpeg
-*.ico
-*.webp
-convert_icon.py
-check_transparency.py
+# Packaged extension
+*.zip
+release/
+dist/
 
-# Pero permitimos las imagenes de la guia
+# Local data exports
+ig_auto_*.csv
+ig_auto_*.xls
+follow-tracker_*.csv
+follow-tracker_*.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Documentation screenshots are intentionally versioned
 !docs/
 !docs/*.png
 !docs/*.jpg
 !docs/*.gif
-!icon.ico

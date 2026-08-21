@@ -3,14 +3,57 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Follow Tracker Auto</title>
+    <title>Follow Tracker</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <main class="app">
-      <div class="loading">Abriendo panel en Instagram...</div>
+    <main class="popup-shell">
+      <header class="brand-row">
+        <div class="brand-mark" aria-hidden="true">FT</div>
+        <div>
+          <p class="eyebrow">EXTENSION LOCAL</p>
+          <h1>Follow Tracker</h1>
+        </div>
+        <span class="privacy-pill"><span></span> Privado</span>
+      </header>
+
+      <section class="profile-card" aria-live="polite">
+        <div class="profile-topline">
+          <div>
+            <p class="label">Perfil actual</p>
+            <p id="profile-name" class="profile-name">Detectando...</p>
+          </div>
+          <span id="profile-state" class="state-pill">Revisando</span>
+        </div>
+        <p id="profile-help" class="profile-help">Abre un perfil de Instagram para analizarlo.</p>
+        <div id="mini-stats" class="mini-stats" hidden>
+          <div><strong id="followers-count">0</strong><span>Seguidores</span></div>
+          <div><strong id="following-count">0</strong><span>Seguidos</span></div>
+          <div><strong id="reports-count">0</strong><span>Reportes</span></div>
+        </div>
+      </section>
+
+      <button id="analyze-button" class="button button-primary" type="button" disabled>
+        <span class="button-icon" aria-hidden="true">↻</span>
+        <span><strong>Analizar perfil actual</strong><small>Guarda una nueva captura y detecta cambios</small></span>
+      </button>
+
+      <button id="dashboard-button" class="button button-secondary" type="button">
+        <span class="button-icon" aria-hidden="true">⌁</span>
+        <span><strong>Abrir dashboard</strong><small>Historial, fechas, personas y exportaciones</small></span>
+        <span aria-hidden="true">→</span>
+      </button>
+
+      <div id="message" class="message" hidden></div>
+
+      <footer>
+        <span>Los datos quedan en este navegador.</span>
+        <button id="open-instagram" class="text-button" type="button">Abrir Instagram</button>
+      </footer>
     </main>
+
     <script src="core.js"></script>
+    <script src="history.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

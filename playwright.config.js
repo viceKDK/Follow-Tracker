@@ -8,9 +8,8 @@ module.exports = defineConfig({
   reporter: [["line"]],
   use: {
     browserName: "chromium",
-    channel: "chrome",
     headless: true,
     screenshot: "only-on-failure",
-    trace: "retain-on-failure",
-  },
+    trace: "retain-on-failure"
+  }
 });

@@ -132,6 +132,7 @@ async function mockInstagram(page, counts) {
 async function loadExtension(page) {
   await page.addScriptTag({ path: path.join(projectRoot, "extension", "core.js") });
   await page.addScriptTag({ path: path.join(projectRoot, "extension", "content.js") });
+  await page.addScriptTag({ path: path.join(projectRoot, "extension", "export-policy.js") });
   const response = await page.evaluate(() => globalThis.__ftDispatch({ type: "SHOW_OVERLAY" }));
   expect(response).toEqual({ ok: true, error: null });
 }
@@ -157,11 +158,14 @@ for (const scenario of [
 
     const state = await page.evaluate(() => ({
       downloads: globalThis.__ftTest.downloads,
+      messages: globalThis.__ftTest.messages,
       storage: globalThis.__ftTest.storage,
     }));
-    expect(state.downloads).toHaveLength(3);
-    expect(state.downloads.filter((name) => name.endsWith(".csv"))).toHaveLength(2);
-    expect(state.downloads.some((name) => name.endsWith(".xls"))).toBe(true);
+    expect(state.downloads).toHaveLength(2);
+    expect(state.downloads.every((name) => name.endsWith(".csv"))).toBe(true);
+    expect(state.downloads.some((name) => name.includes("_followers_"))).toBe(true);
+    expect(state.downloads.some((name) => name.includes("_following_"))).toBe(true);
+    expect(state.messages.filter((message) => message.type === "legacy-report-suppressed")).toHaveLength(1);
     expect(state.storage.ft_history_demo_profile.followers).toHaveLength(scenario.followers);
     expect(state.storage.ft_history_demo_profile.following).toHaveLength(scenario.following);
     expect(unexpected).toEqual([]);
