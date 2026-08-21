@@ -1,215 +1,231 @@
-﻿# Follow-Tracker
+# Follow Tracker
 
-![Python Version](https://img.shields.io/badge/python-3.x-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-active-brightgreen)
+![Chrome Extension](https://img.shields.io/badge/Chrome-Manifest%20V3-7557ff)
+![Node](https://img.shields.io/badge/Node-%3E%3D20-43853d)
+![License](https://img.shields.io/badge/license-MIT-169c72)
 
-Herramienta para comparar seguidores y seguidos de Instagram.
+Extension de navegador para comparar seguidores y seguidos de Instagram, detectar cambios entre capturas y conservar un historial local por persona, fecha y reporte.
 
-## Novedades
+> Follow Tracker no esta afiliado con Instagram ni Meta. Funciona sobre la sesion que ya esta abierta en tu navegador y puede requerir mantenimiento cuando Instagram modifica su interfaz o sus endpoints internos.
 
-- Flujo `1 solo EXE` con modo `AUTO 1-click (esperar)`.
-- Extensión de navegador `1 clic` sin consola (`extension/`).
-- Historial por perfil con altas y bajas: nuevos seguidores, nuevos seguidos, dejaron de seguirte y dejaste de seguir.
-- Capturas identificadas por `run_id`, sin mezclar archivos de ejecuciones diferentes.
-- Las capturas parciales no reemplazan una línea base completa.
-- Carpeta fija `yo/` para tus JSON descargados de Instagram.
-- Scraper automático por perfil externo: primero `followers`, luego `following`.
-- En extensión: panel flotante fijo durante ejecución, con botón `X` para cerrarlo manualmente.
-- Detección del total esperado del perfil (`esperado=<n>`) y recuperación automática si hay estancamiento.
-- Reporte final con `Ultimo Scrapeo`.
+## Que cambia en la version 2
 
-## Instalación guiada de la extensión
+El proyecto deja de ser una mezcla entre una aplicacion de Windows y una extension. La fuente de verdad pasa a ser exclusivamente `extension/`.
 
-Recomendado para usuario final.
+La salida principal ya no es una planilla dificil de consultar, sino un dashboard dentro de la propia extension:
 
-### Pasos con capturas
+- total actual de seguidores, seguidos y relaciones mutuas;
+- personas que sigues y no te siguen;
+- personas que te siguen y no sigues;
+- evolucion de seguidores y seguidos por reporte;
+- ultima comparacion entre capturas;
+- comparacion manual entre cualquier par de reportes guardados;
+- actividad cronologica por usuario;
+- busqueda y filtros;
+- historial individual con fecha y `run_id` exactos;
+- exportacion de backup JSON, actividad CSV y relaciones CSV;
+- soporte para varios perfiles, cada uno con su propio historial.
 
-| # | Acción | Captura |
-|---|--------|---------|
-| 1 | Abre `chrome://extensions` (o `edge://extensions`) | ![Paso 1](docs/01-extensions.png) |
-| 2 | Activa **Modo desarrollador** (esquina superior derecha) | ![Paso 2](docs/02-dev-mode.png) |
-| 3 | Pulsa **Cargar descomprimida** y selecciona la carpeta `extension/` | ![Paso 3](docs/03-load-unpacked.png) |
-| 4 | Fija el icono de la extensión en la barra | ![Paso 4](docs/04-pin-icon.png) |
-| 5 | Abre Instagram en el perfil objetivo y pulsa el icono de la extensión. El panel flotante aparece arriba a la derecha. Click en **Iniciar análisis** | ![Paso 5](docs/05-overlay.png) |
-| 6 | Espera a que termine. Los archivos se descargan automáticamente | ![Paso 6](docs/09-analysis-finished.png) |
+Ejemplo de evento conservado:
 
-> Las imágenes están en `docs/`. Las capturas de instalación que todavía no se hayan agregado aparecerán como un cuadro vacío en GitHub.
-
-### Así se ve la extensión
-
-**1. Abre el perfil que quieres analizar**
-
-<img src="docs/07-profile-open.png" alt="Perfil de Instagram abierto antes del análisis" width="900">
-
-**2. Pulsa el icono de la extensión para abrir el panel**
-
-<img src="docs/05-overlay.png" alt="Panel Follow Tracker Auto listo para iniciar" width="900">
-
-**3. Durante el análisis puedes ver el progreso de seguidores y seguidos**
-
-<img src="docs/08-analysis-running.png" alt="Follow Tracker Auto mostrando el análisis en progreso" width="900">
-
-**4. Al finalizar muestra el método utilizado, el 100% recolectado y el historial guardado**
-
-<img src="docs/09-analysis-finished.png" alt="Follow Tracker Auto con el análisis finalizado mediante API" width="900">
-
-Qué hace automáticamente:
-
-1. Abre `followers`.
-2. Extrae usuarios con scroll progresivo y pausas aleatorias.
-3. Cierra ese modal.
-4. Abre `following`.
-5. Repite extracción.
-6. Descarga resultados.
-7. Guarda una línea base local solo si ambas listas tienen cobertura suficiente.
-
-Archivos descargados:
-
-- `ig_auto_<perfil>_followers_<run_id>_<ts>.csv`
-- `ig_auto_<perfil>_following_<run_id>_<ts>.csv`
-- `ig_auto_<perfil>_seguidores_vs_seguidos_<fecha>.xls` (compatible con Excel)
-
-Notas:
-
-- Requiere **sesión activa de Instagram** en el mismo perfil de navegador (cookies `csrftoken`, `sessionid`, `ds_user_id`). Si no estás logueado, el modo API se salta y solo opera el UI fallback.
-- Mantén activa la pestaña de Instagram para máxima estabilidad.
-- Si cambias de pestaña puede ralentizarse la carga del modal.
-- La extensión intenta primero el modo **API** (`/api/v1/friendships/...`). Si Instagram responde con errores `429`/`503`, espera y reintenta automáticamente. Si la API falla o devuelve demasiado poco, cambia al modo **UI** (modal o ruta `/usuario/followers/`) y comienza un nuevo recorrido de las listas.
-- Cuando se ejecutan primero los reintentos de API y después el recorrido por UI, el análisis puede demorar considerablemente más porque se utilizaron ambos métodos.
-- El objetivo es obtener la mayor cobertura posible, pero no se garantiza siempre el 100%: Instagram puede mostrar un contador diferente de la cantidad de usuarios que realmente entrega. La extensión informa esa diferencia y conserva los usuarios obtenidos.
-- Si una captura no llega al umbral de cobertura, el reporte se genera pero el historial anterior no se reemplaza. Así se evitan falsos “nuevos seguidores” en la próxima ejecución.
-- Los botones **Exportar historial** y **Borrar historial** administran los datos locales del perfil abierto.
-
-### Privacidad de los datos
-
-- Las listas y el historial se procesan en tu equipo y se guardan en el almacenamiento local de la extensión.
-- La extensión no envía el historial a servidores propios.
-- Al desinstalar la extensión o usar **Borrar historial**, se elimina la línea base local correspondiente.
-- Los CSV y reportes descargados quedan en tu carpeta de descargas y debes borrarlos manualmente si ya no los necesitas.
-
-### Rendimiento y tiempo de espera
-
-Cuantos más seguidores y seguidos tenga el perfil, más tiempo demorará el análisis. La extensión debe recorrer las dos listas completas, por lo que el tiempo depende de la suma de ambas.
-
-- El modo **API** normalmente es el más rápido y procesa los usuarios por páginas.
-- El modo **UI** necesita abrir las listas y desplazarse progresivamente, por lo que puede demorar bastante más.
-- Una conexión lenta, los límites temporales de Instagram (`429`/`503`), los reintentos y una pestaña en segundo plano también aumentan el tiempo.
-- No cierres la pestaña ni cambies de perfil mientras el análisis esté en curso.
-- No existe un tiempo fijo garantizado: dos cuentas con cantidades similares pueden demorar diferente.
-
-Para obtener tiempos reales conviene probar perfiles de distintos tamaños. Una matriz inicial recomendada es:
-
-| Caso | Seguidores aproximados | Seguidos aproximados | Objetivo |
-|------|-------------------------|----------------------|----------|
-| Pequeño | 1.000 (1K) | 500 | Medir el funcionamiento normal con API y UI |
-| Mediano | 10.000 (10K) | 1.000 | Medir una extracción larga y el límite actual del modo UI |
-| Muchos seguidos | 10.000 (10K) | 7.500 | Comprobar el efecto de recorrer una segunda lista grande |
-| Estrés | 100.000 (100K) | 1.000 | Evaluar límites, memoria, bloqueos y respuestas de Instagram |
-
-Estimaciones iniciales de duración (todavía no verificadas mediante pruebas controladas):
-
-| Tamaño aproximado | Tiempo estimado por API | Tiempo estimado por UI |
-|-------------------|-------------------------|------------------------|
-| 1K seguidores | 20–60 segundos | 5–15 minutos |
-| 10K seguidores | 2–5 minutos | 20–60 minutos |
-| 100K seguidores | 45–90 minutos o más | No recomendable |
-
-> Estos tiempos son orientativos, no resultados medidos. Pueden cambiar considerablemente según la cantidad de seguidos, la conexión, la velocidad de respuesta de Instagram, los reintentos y los bloqueos temporales. Para publicar tiempos confiables se debe ejecutar cada caso varias veces y calcular un promedio.
-
-Registrar el resultado de cada ejecución:
-
-| Perfil probado | Seguidores | Seguidos | Método usado | Duración | Reintentos | Usuarios obtenidos | Resultado |
-|-----------------|------------|----------|--------------|----------|------------|--------------------|-----------|
-|                 |            |          | API / UI     |          |            |                    |           |
-
-Las pruebas deberían incluir, como mínimo, una cuenta pequeña, una mediana y una grande, usando el mismo equipo y conexión. El tiempo debe medirse desde **Iniciar análisis** hasta que aparezca **Finalizado** y se descargue el Excel.
-
-> **Límite actual:** el modo UI recolecta hasta 10.000 usuarios por lista. El modo API permite hasta 600 páginas de 100 usuarios (aproximadamente 60.000 por lista). Por eso una cuenta de 100K sirve actualmente como prueba de estrés, pero no se debe considerar una extracción completa. Además, puede generar muchos reintentos y bloqueos temporales de Instagram.
-
-## Uso rápido (Windows EXE)
-
-1. Descarga `comparar_ig.exe` desde Releases.
-2. Ejecuta el EXE.
-3. Elige modo:
-
-### Modo 1: Mi cuenta (JSON)
-
-1. Crea carpeta `yo` junto al EXE.
-2. Copia:
-- uno o varios `yo/followers*.json`
-- uno o varios `yo/following*.json`
-3. Pulsa `Usar mi cuenta (JSON)` e indica el perfil al que pertenece la descarga.
-
-Salida:
-
-- `yo/seguidores_vs_seguidos.xlsx`
-
-### Modo 2: Otra cuenta (AUTO 1-click)
-
-1. Pulsa `AUTO 1-click (esperar)` en el EXE.
-2. Deja el EXE abierto.
-3. En Instagram perfil objetivo, ejecuta `smart_scraper.js`.
-4. El EXE detecta los CSV nuevos y genera salida automática.
-
-> Este modo se mantiene por compatibilidad. Para instalaciones nuevas se recomienda usar directamente la extensión, que genera los dos CSV y el reporte sin ejecutar código manualmente.
-
-Salida en carpeta por usuario:
-
-- `<usuario>/followers.csv`
-- `<usuario>/following.csv`
-- `<usuario>/seguidores_vs_seguidos.xlsx`
-
-## Uso para desarrolladores (Python)
-
-```bash
-pip install -r requirements.txt
-python comparar_ig.py
+```text
+@beto — Te dejo de seguir
+21/08/2026 15:30
+Reporte: 20260821t153000-ab123
 ```
 
-Verificaciones locales:
+La primera captura completa crea una linea base. Desde la segunda captura completa se registran altas y bajas. Una captura parcial no reemplaza la linea base ni genera falsos unfollows.
+
+La fecha de cada evento es la fecha en que **el reporte detecto el cambio**. La extension no puede saber el instante exacto en que otra persona pulso seguir o dejar de seguir entre dos capturas.
+
+## Privacidad
+
+Todo se procesa y almacena localmente mediante `chrome.storage.local`.
+
+- No existe backend propio.
+- No se crea una cuenta de Follow Tracker.
+- No se envia el historial a servidores del proyecto.
+- Los permisos se limitan a la pestaña activa, almacenamiento local, inyeccion del content script y acceso a `instagram.com`.
+- `unlimitedStorage` evita perder historiales grandes por la cuota local predeterminada del navegador.
+
+Borrar la extension o usar **Borrar historial de este perfil** elimina los datos locales correspondientes. Las exportaciones descargadas deben borrarse manualmente si ya no se necesitan.
+
+## Instalacion manual
+
+1. Descarga `follow-tracker-extension.zip` desde Releases.
+2. Descomprime el archivo.
+3. Abre `chrome://extensions` o `edge://extensions`.
+4. Activa **Modo desarrollador**.
+5. Pulsa **Cargar descomprimida**.
+6. Selecciona la carpeta que contiene `manifest.json`.
+7. Fija Follow Tracker en la barra del navegador.
+
+Tambien se puede clonar este repositorio y cargar directamente la carpeta `extension/`.
+
+## Uso
+
+1. Inicia sesion en Instagram en el mismo navegador.
+2. Abre un perfil con formato `instagram.com/usuario/`.
+3. Pulsa el icono de Follow Tracker.
+4. Selecciona **Analizar perfil actual**.
+5. Mantiene la pestaña abierta mientras se recorren seguidores y seguidos.
+6. Al finalizar se descargan los dos CSV de la captura y se abre automaticamente el dashboard.
+7. Tambien puedes volver al dashboard en cualquier momento desde el popup o el panel flotante.
+
+El analisis intenta primero el modo API y, si no obtiene cobertura suficiente, usa el recorrido visual de las listas como fallback.
+
+### Significado de las categorias
+
+| Categoria | Significado |
+|---|---|
+| Mutuo | Ambos se siguen actualmente |
+| Te sigue; no lo sigues | La persona te sigue, pero tu no |
+| Lo sigues; no te sigue | Tu la sigues, pero ella no |
+| Te siguio | Aparecio en seguidores desde el reporte anterior |
+| Te dejo de seguir | Desaparecio de seguidores desde el reporte anterior |
+| Empezaste a seguir | Aparecio en seguidos desde el reporte anterior |
+| Dejaste de seguir | Desaparecio de seguidos desde el reporte anterior |
+| Solo en historial | Ya no esta en las listas actuales, pero conserva eventos previos |
+
+## Dashboard
+
+El dashboard se abre como una pagina interna de la extension y funciona sin conexion adicional.
+
+### Resumen
+
+Muestra los indicadores principales y el cambio neto del ultimo reporte.
+
+### Evolucion
+
+Grafica los totales de seguidores y seguidos a lo largo de las capturas completas guardadas.
+
+### Ultima comparacion
+
+Separa nuevos seguidores, bajas, nuevas cuentas seguidas y cuentas que dejaste de seguir.
+
+### Comparar reportes
+
+Permite elegir una captura inicial y otra final, aunque no sean consecutivas. El dashboard reconstruye ambas listas desde la linea base y los cambios guardados para mostrar altas, bajas y diferencias netas.
+
+### Actividad
+
+Ordena todos los eventos desde el mas reciente. Cada fila incluye usuario, tipo de cambio, fecha y reporte.
+
+### Personas
+
+Permite buscar un usuario, filtrar relaciones y abrir su historial individual. Una persona que dejo de seguirte no desaparece del dashboard aunque ya no figure en la captura actual.
+
+## Archivos y exportaciones
+
+Cada analisis completo descarga automaticamente dos CSV crudos, identificados con el mismo `run_id`:
+
+```text
+ig_auto_<perfil>_followers_<run_id>_<timestamp>.csv
+ig_auto_<perfil>_following_<run_id>_<timestamp>.csv
+```
+
+Sirven como respaldo portable, para comparar manualmente en Excel/Google Sheets o para procesarlos con otras herramientas. El reporte `.xls` heredado queda desactivado porque el dashboard pasa a ser la interfaz principal.
+
+Desde el dashboard tambien se pueden descargar bajo demanda:
+
+- **Backup JSON:** captura actual, linea base, reportes y eventos completos.
+- **Actividad CSV:** usuario, evento, fecha, reporte y `run_id`.
+- **Relaciones CSV:** estado actual de cada usuario.
+
+## Modelo de datos
+
+La extension mantiene dos registros por perfil:
+
+```text
+ft_history_<perfil>   -> captura completa actual
+ft_timeline_<perfil>  -> reportes y eventos historicos
+```
+
+La linea temporal conserva una unica captura base y, despues, solo los cambios por reporte. Asi puede reconstruir y comparar capturas antiguas sin guardar una copia completa de miles de usuarios en cada ejecucion.
+
+Cada reporte conserva:
+
+```text
+id / runId
+capturedAt
+followersCount
+followingCount
+mutualCount
+newFollowers
+lostFollowers
+newFollowing
+lostFollowing
+```
+
+Cada evento conserva:
+
+```text
+username
+type
+occurredAt
+reportId
+runId
+```
+
+Los datos anteriores de `ft_history_*` se migran automaticamente a una linea base la primera vez que se instala o actualiza la version 2.
+
+## Limitaciones conocidas
+
+Instagram puede imponer pausas, devolver errores `429`/`503`, ocultar cuentas suspendidas o informar un contador distinto al numero de filas que entrega. Por eso:
+
+- no se promete una duracion fija;
+- no se deben cerrar la pestaña ni cambiar de perfil durante el analisis;
+- solo una captura con cobertura suficiente actualiza el historial;
+- una cuenta privada solo puede analizarse cuando la sesion activa tiene acceso a sus listas;
+- el modo visual es mas lento que el modo API;
+- el funcionamiento puede cambiar cuando Instagram actualiza su web.
+
+La extension no realiza follows, unfollows, mensajes ni acciones masivas.
+
+## Desarrollo
+
+Requisitos:
+
+- Node.js 20 o superior;
+- Chromium para las pruebas E2E.
 
 ```bash
-python -m unittest discover -s tests -v
+npm ci
+npx playwright install chromium
 npm test
 npm run check
 npm run e2e:fixture
 npm run e2e
 ```
 
-`npm run e2e:fixture` valida sin navegador el fixture determinista. `npm run e2e` ejecuta la extensión real en Chrome sobre rutas de Instagram interceptadas, sin iniciar sesión ni acceder a la red. Incluye perfiles normales, cuentas vacías y cancelación durante una petición lenta. Ver [`tests/e2e/README.md`](tests/e2e/README.md).
+### Estructura
 
-## Cómo obtener JSON oficiales de tu cuenta
+```text
+extension/
+  manifest.json      Configuracion Manifest V3
+  icons/              Iconos de la extension en 16/32/48/128 px
+  background.js      Mensajeria, badge y persistencia de la linea temporal
+  content.js         Extraccion API/UI y panel de progreso sobre Instagram
+  core.js            Comparacion y utilidades puras
+  history.js         Reportes, eventos y migracion del historial
+  export-policy.js    Conserva los CSV, desactiva el Excel heredado y enlaza el dashboard
+  popup.*             Inicio rapido y acceso al dashboard
+  dashboard.*         Interfaz de analitica e historial
 
-En Instagram:
-
-1. Perfil -> Configuración -> Tu información y permisos -> Descargar tu información.
-2. Selecciona `Seguidores y seguidos`.
-3. Formato `JSON`.
-4. Copia esos archivos a `yo/`.
-
-## Generar EXE
-
-```bash
-pip install -r requirements-dev.txt
-./build.ps1
+tests/e2e/            Pruebas del flujo de extraccion
+.github/workflows/    CI y release de la extension
 ```
 
-Salidas:
+## Releases
 
-- `dist/comparar_ig.exe`
-- `dist/follow-tracker-extension.zip`
+Los tags `v*` ejecutan pruebas y publican un unico artefacto:
 
-Cada push y pull request ejecuta las pruebas en GitHub Actions. Al publicar un tag `v*`, el workflow de release crea el EXE, empaqueta la extensión y adjunta ambos artefactos a un GitHub Release.
+```text
+follow-tracker-extension.zip
+```
 
-## Estructura técnica
-
-- `extension/core.js`: comparación, cobertura, nombres de archivos y CSV; es independiente del navegador y tiene pruebas unitarias.
-- `extension/content.js`: integración con Instagram, API, fallback UI y panel flotante.
-- `comparar_ig.py`: lectura JSON/CSV, historial y generación del XLSX.
-- `auto_watcher.py`: compatibilidad con el flujo legacy; reutiliza la lógica de `comparar_ig.py`.
-- `smart_scraper.js` y `analizar_csv.py`: entradas de compatibilidad para instalaciones anteriores.
+Ya no se compila ni publica un ejecutable de Windows.
 
 ## Licencia
 
-MIT. Ver `LICENSE`.
+MIT. Consulta [`LICENSE`](LICENSE).

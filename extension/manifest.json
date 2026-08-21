@@ -1,23 +1,34 @@
 {
   "manifest_version": 3,
-  "name": "Follow Tracker Auto",
-  "description": "Analiza followers/following de un perfil de Instagram en 1 clic, sin consola.",
-  "version": "1.4.0",
+  "name": "Follow Tracker - Historial local",
+  "description": "Descarga CSV de cada captura, conserva cambios por fecha y los muestra en un dashboard privado.",
+  "version": "2.0.0",
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://www.instagram.com/*",
     "https://instagram.com/*"
   ],
   "action": {
-    "default_title": "Follow Tracker Auto",
-    "default_popup": "popup.html"
+    "default_title": "Follow Tracker",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "background": {
     "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "dashboard.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {
@@ -27,9 +38,16 @@
       ],
       "js": [
         "core.js",
-        "content.js"
+        "content.js",
+        "export-policy.js"
       ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }
