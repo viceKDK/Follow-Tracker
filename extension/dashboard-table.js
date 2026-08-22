@@ -93,11 +93,13 @@
                 (item) => `
                   <tr class="table-tone-${escapeHtml(resultToneClass(item.tone))}">
                     <th scope="row" class="table-user-cell">
-                      <span class="relationship-avatar">${escapeHtml(item.normalized.slice(0, 2))}</span>
-                      <span>
-                        <strong>@${escapeHtml(item.username)}</strong>
-                        <small>${escapeHtml(relationshipStateLabels.current[item.toState])}</small>
-                      </span>
+                      <div class="table-user-content">
+                        <span class="relationship-avatar">${escapeHtml(item.normalized.slice(0, 2))}</span>
+                        <span>
+                          <strong>@${escapeHtml(item.username)}</strong>
+                          <small>${escapeHtml(relationshipStateLabels.current[item.toState])}</small>
+                        </span>
+                      </div>
                     </th>
                     <td data-label="Antes · te seguía">${booleanCell(item.fromFollowsYou, true)}</td>
                     <td data-label="Antes · lo seguías">${booleanCell(item.fromYouFollow, true)}</td>
