@@ -104,14 +104,17 @@
   left: 0;
   z-index: 2;
   min-width: 205px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
   background: #fff;
   box-shadow: 1px 0 0 var(--line);
 }
 
-.table-user-cell > span:last-child {
+.table-user-content {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.table-user-content > span:last-child {
   min-width: 0;
 }
 
