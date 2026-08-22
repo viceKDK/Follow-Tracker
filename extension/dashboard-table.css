@@ -1,0 +1,246 @@
+.relationship-list-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.relationship-list-actions strong,
+.relationship-list-actions small {
+  display: block;
+}
+
+.relationship-list-actions strong {
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.relationship-list-actions small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
+.comparison-export {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 8px 11px;
+}
+
+.comparison-export:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.relationship-list {
+  display: block;
+  margin-top: 14px;
+}
+
+.relationship-table-shell {
+  max-height: 650px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
+}
+
+.relationship-table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+.relationship-table th,
+.relationship-table td {
+  padding: 10px 11px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.relationship-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  color: #58647a;
+  background: #f4f7fb;
+  box-shadow: 0 1px 0 var(--line);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.relationship-table thead th:first-child {
+  left: 0;
+  z-index: 6;
+}
+
+.relationship-table tbody tr:last-child th,
+.relationship-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.relationship-table tbody tr:nth-child(even) td,
+.relationship-table tbody tr:nth-child(even) .table-user-cell {
+  background: #fbfcfe;
+}
+
+.relationship-table tbody tr:hover td,
+.relationship-table tbody tr:hover .table-user-cell {
+  background: #f5f8ff;
+}
+
+.table-user-cell {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 205px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: #fff;
+  box-shadow: 1px 0 0 var(--line);
+}
+
+.table-user-cell > span:last-child {
+  min-width: 0;
+}
+
+.table-user-cell strong,
+.table-user-cell small {
+  display: block;
+}
+
+.table-user-cell strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-user-cell small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 7.8px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.relationship-table .relationship-avatar {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  font-size: 8.5px;
+}
+
+.list-boolean {
+  min-width: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 850;
+}
+
+.list-boolean.yes {
+  color: #0d7453;
+  background: var(--green-soft);
+  box-shadow: inset 0 0 0 1px #ccecdf;
+}
+
+.list-boolean.no {
+  color: #758094;
+  background: #eef1f5;
+  box-shadow: inset 0 0 0 1px #dde2ea;
+}
+
+.table-result {
+  display: inline-flex;
+  align-items: center;
+  min-height: 27px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  font-size: 8.4px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.result-positive {
+  color: #0e7655;
+  background: var(--green-soft);
+}
+
+.result-negative {
+  color: #b63349;
+  background: var(--red-soft);
+}
+
+.result-info {
+  color: var(--blue-dark);
+  background: var(--blue-soft);
+}
+
+.result-warning {
+  color: #94600d;
+  background: var(--amber-soft);
+}
+
+.result-neutral {
+  color: #626e82;
+  background: #eef1f5;
+}
+
+.table-profile-column {
+  width: 72px;
+  text-align: center !important;
+}
+
+.table-profile-link {
+  min-height: 28px;
+  padding: 6px 9px;
+}
+
+.table-tone-negative .table-user-cell {
+  box-shadow: inset 3px 0 0 var(--red), 1px 0 0 var(--line);
+}
+
+.table-tone-positive .table-user-cell {
+  box-shadow: inset 3px 0 0 var(--green), 1px 0 0 var(--line);
+}
+
+.table-tone-info .table-user-cell {
+  box-shadow: inset 3px 0 0 var(--blue), 1px 0 0 var(--line);
+}
+
+.table-tone-warning .table-user-cell {
+  box-shadow: inset 3px 0 0 var(--amber), 1px 0 0 var(--line);
+}
+
+@media (max-width: 720px) {
+  .relationship-list-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .comparison-export {
+    width: 100%;
+  }
+
+  .relationship-table-shell {
+    max-height: 68vh;
+    border-radius: 12px;
+  }
+}
