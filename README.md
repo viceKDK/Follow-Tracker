@@ -2,165 +2,193 @@
 
 # Follow Tracker
 
-### Compará reportes de Instagram y entendé exactamente qué cambió
+### Compará seguidores y seguidos entre dos fechas
 
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Manifest%20V3-2f6df6?style=for-the-badge&logo=googlechrome&logoColor=white)](#instalación)
-[![Node](https://img.shields.io/badge/Node-%3E%3D20-0f9f78?style=for-the-badge&logo=nodedotjs&logoColor=white)](#desarrollo)
+[![Node](https://img.shields.io/badge/Node-%3E%3D20-15966d?style=for-the-badge&logo=nodedotjs&logoColor=white)](#desarrollo)
 [![License](https://img.shields.io/badge/License-MIT-17213b?style=for-the-badge)](LICENSE)
 
-Extensión de navegador que guarda capturas de seguidores y seguidos, compara cualquier par de reportes y conserva un historial por persona, fecha y cambio detectado.
+Extensión de navegador para guardar reportes de Instagram y ver cómo estaba cada relación antes y cómo está ahora.
 
 </div>
 
 > [!IMPORTANT]
-> **El valor principal está en la comparación.** Una sola captura muestra el estado actual; dos reportes permiten saber quién empezó a seguirte, quién dejó de seguirte, a quién empezaste a seguir, a quién dejaste de seguir y cómo cambió cada relación.
+> El valor principal de Follow Tracker no es solamente contar seguidores. Es comparar dos reportes y mostrar, persona por persona, si te sigue, si la seguís, si se siguen o si alguno dejó de seguir al otro.
 
 > [!NOTE]
-> Follow Tracker no está afiliado con Instagram ni Meta. Trabaja sobre la sesión que ya está abierta en el navegador y puede necesitar mantenimiento cuando Instagram modifica su interfaz o sus endpoints internos.
+> Follow Tracker no está afiliado con Instagram ni Meta. Funciona sobre la sesión abierta en el navegador y puede necesitar mantenimiento cuando Instagram modifica su interfaz o sus endpoints internos.
 
-## Vista completa del producto
-
-La pantalla principal prioriza la comparación entre capturas y deja visibles, en un mismo recorrido, el estado actual, la evolución, los movimientos recientes y las relaciones por persona. Todos los perfiles y números son ficticios.
+## Frontend
 
 <p align="center">
-  <img src="docs/dashboard-demo.png" alt="Dashboard principal de Follow Tracker" width="100%">
+  <img src="docs/dashboard-showcase.webp" alt="Pestaña Antes y ahora de Follow Tracker, con la relación anterior y actual de cada persona" width="600">
 </p>
 
-La siguiente composición reúne el dashboard, la comparación detallada, la actividad, las personas, la vista adaptable y el popup de la extensión.
+> Todas las cuentas, fechas y cifras de la captura son ficticias.
 
-<p align="center">
-  <img src="docs/dashboard-showcase.webp" alt="Frontend completo de Follow Tracker: dashboard, comparación de reportes, actividad, personas, vista adaptable y popup" width="520">
-</p>
+El dashboard se divide en cuatro pestañas claras:
 
-## Qué podés descubrir
-
-| Pregunta | Respuesta del dashboard |
+| Pestaña | Qué muestra |
 |---|---|
-| ¿Quién empezó a seguirme? | Usuarios agregados a seguidores entre el reporte inicial y el final |
-| ¿Quién me dejó de seguir? | Usuarios eliminados de seguidores entre ambos reportes |
-| ¿A quién empecé a seguir? | Cuentas agregadas a tu lista de seguidos |
-| ¿A quién dejé de seguir? | Cuentas eliminadas de tu lista de seguidos |
-| ¿Quién me sigue y yo no? | Relación actual **Te sigue; no lo seguís** |
-| ¿A quién sigo y no me sigue? | Relación actual **Lo seguís; no te sigue** |
-| ¿Quiénes son mutuos? | Personas que se siguen en ambos sentidos |
-| ¿Qué pasó con una persona concreta? | Historial individual con evento, fecha y reporte |
+| **Resumen** | Cantidad actual de seguidores, seguidos, personas que se siguen, relaciones no correspondidas, bajas recientes y evolución |
+| **Antes y ahora** | Comparación detallada entre un reporte anterior y uno actual |
+| **Personas** | Estado actual e historial individual de cada usuario |
+| **Actividad** | Todos los cambios detectados, ordenados por fecha y reporte |
 
-Además, permite:
+## Antes y ahora
 
-- comparar cualquier par de capturas guardadas, aunque no sean consecutivas;
-- ver la evolución de seguidores y seguidos por reporte;
-- consultar la última comparación automáticamente;
-- revisar todos los eventos en orden cronológico;
-- buscar personas y filtrar relaciones;
-- conservar perfiles separados;
-- exportar backup JSON, actividad CSV y relaciones CSV;
-- descargar automáticamente los dos CSV crudos de cada captura.
+Esta es la pantalla principal del producto.
+
+Seleccionás:
+
+1. un **reporte anterior**;
+2. un **reporte actual**.
+
+La aplicación reconstruye ambas capturas y compara las dos listas completas.
+
+Para cada persona muestra:
+
+- su relación en el reporte anterior;
+- su relación en el reporte actual;
+- una frase que explica exactamente qué pasó.
+
+### Estados actuales
+
+| Estado | Significado |
+|---|---|
+| **Se siguen** | Vos lo seguís y esa persona también te sigue |
+| **Te sigue; no lo seguís** | Esa persona te sigue, pero vos no la seguís |
+| **Lo seguís; no te sigue** | Vos seguís a esa persona, pero ella no te sigue |
+| **No se siguen** | Ninguno sigue al otro |
+
+### Cambios entre reportes
+
+| Mensaje | Qué significa |
+|---|---|
+| **Te sigue ahora** | En el reporte anterior no te seguía y en el actual sí |
+| **Te dejó de seguir** | En el reporte anterior te seguía y en el actual no |
+| **Te dejó de seguir; vos todavía lo seguís** | Antes se seguían y ahora solamente vos lo seguís |
+| **Lo seguís ahora** | Antes no lo seguías y ahora sí |
+| **Lo dejaste de seguir** | Antes lo seguías y ahora no |
+| **Lo dejaste de seguir; todavía te sigue** | Antes se seguían y ahora solamente esa persona te sigue |
+| **Se siguen ahora** | Antes no se seguían en ambos sentidos y ahora sí |
+| **Se dejaron de seguir** | Antes se seguían y ahora ninguno sigue al otro |
+
+La pestaña permite filtrar por:
+
+- relaciones que cambiaron;
+- personas que te siguen ahora;
+- personas que te dejaron de seguir;
+- personas que seguís y no te siguen;
+- personas que te siguen y no seguís;
+- personas que se siguen;
+- todas las personas presentes en cualquiera de los dos reportes.
+
+## Resumen actual
+
+El resumen muestra el último reporte guardado:
+
+- **Te siguen:** total de seguidores actuales.
+- **Seguís:** total de cuentas seguidas actualmente.
+- **Se siguen:** relaciones mutuas.
+- **Te siguen; no los seguís:** seguidores que no seguís.
+- **Los seguís; no te siguen:** cuentas que seguís y no te siguen.
+- **Te dejaron de seguir:** bajas detectadas desde el reporte anterior.
+
+También incluye una gráfica con la evolución de seguidores y seguidos a través de todos los reportes.
+
+## Personas
+
+La pestaña **Personas** permite buscar una cuenta y ver:
+
+- estado actual;
+- cantidad de cambios guardados;
+- último cambio detectado;
+- fecha;
+- reporte que detectó el cambio;
+- historial individual completo.
+
+Filtros disponibles:
+
+- Todos.
+- Te dejó de seguir.
+- Te sigue; no lo seguís.
+- Lo seguís; no te sigue.
+- Se siguen.
+- Ya no se siguen.
+
+## Actividad
+
+La pestaña **Actividad** ordena todos los eventos desde el más reciente:
+
+```text
+@beto te dejó de seguir
+22 ago. 2026, 15:30
+Reporte r4
+```
+
+La fecha indica cuándo el reporte detectó el cambio. La extensión no puede saber el segundo exacto en el que una persona siguió o dejó de seguir la cuenta entre dos análisis.
 
 ## Cómo funciona
 
 ```text
-Primer análisis  →  crea la línea base
-Segundo análisis →  detecta altas y bajas
-Nuevos análisis →  amplían el historial y permiten comparar fechas distintas
+Primer análisis  → crea la línea base
+Segundo análisis → compara contra la línea base
+Nuevos análisis  → amplían el historial
+Dos reportes      → permiten reconstruir el antes y el ahora
 ```
 
-Una captura parcial no reemplaza la línea base ni genera falsos unfollows. La fecha de cada evento es la fecha en la que **el reporte detectó el cambio**; la extensión no puede conocer el instante exacto en que otra persona pulsó seguir o dejar de seguir entre dos capturas.
+Una captura incompleta no reemplaza el historial válido ni genera falsos unfollows.
 
-## Cómo leer el frontend
+## Funciones
 
-### 1. Comparación entre reportes
-
-Es la sección principal del dashboard. Seleccioná una captura en **Reporte inicial** y otra en **Reporte final** para obtener:
-
-- balance neto de seguidores;
-- balance neto de seguidos;
-- variación de relaciones mutuas;
-- personas que empezaron a seguirte;
-- personas que dejaron de seguirte;
-- cuentas que empezaste a seguir;
-- cuentas que dejaste de seguir.
-
-Los reportes no tienen que ser consecutivos. Por ejemplo, podés comparar el primer reporte del mes contra el último.
-
-### 2. Estado actual
-
-Las tarjetas resumen el reporte más reciente:
-
-| Indicador | Significado |
-|---|---|
-| Seguidores | Total actual de personas que te siguen |
-| Seguidos | Total actual de cuentas que seguís |
-| Mutuos | Ambos se siguen |
-| Te siguen; no seguís | Te siguen, pero vos no seguís esas cuentas |
-| No te siguen | Las seguís, pero no te siguen de vuelta |
-| Bajas recientes | Personas que dejaron de seguirte en la última comparación |
-
-### 3. Evolución
-
-El gráfico muestra cómo cambiaron los totales de seguidores y seguidos a lo largo de todas las capturas completas.
-
-### 4. Actividad y personas
-
-La actividad ordena los eventos desde el más reciente. Cada fila incluye usuario, tipo de cambio, fecha y reporte. La sección de personas permite:
-
-- buscar por nombre de usuario;
-- filtrar mutuos;
-- filtrar cuentas que no te siguen;
-- filtrar personas que te siguen y no seguís;
-- filtrar quienes te dejaron de seguir;
-- abrir el historial individual de cada persona.
-
-Una cuenta que dejó de seguirte no desaparece del historial aunque ya no figure entre tus seguidores actuales.
-
-## Pantallas de instalación
-
-<table>
-  <tr>
-    <td width="50%"><strong>1. Abrir extensiones</strong><br><img src="docs/01-extensions.png" alt="Página de extensiones del navegador"></td>
-    <td width="50%"><strong>2. Activar modo desarrollador</strong><br><img src="docs/02-dev-mode.png" alt="Modo desarrollador activado"></td>
-  </tr>
-  <tr>
-    <td width="50%"><strong>3. Cargar la carpeta extension</strong><br><img src="docs/03-load-unpacked.png" alt="Carga de la extensión descomprimida"></td>
-    <td width="50%"><strong>4. Fijar el icono</strong><br><img src="docs/04-pin-icon.png" alt="Icono de Follow Tracker fijado"></td>
-  </tr>
-</table>
-
-## Pantallas del análisis
-
-<table>
-  <tr>
-    <td width="50%"><strong>Panel sobre Instagram</strong><br><img src="docs/05-overlay.png" alt="Panel de Follow Tracker sobre Instagram"></td>
-    <td width="50%"><strong>Perfil listo para analizar</strong><br><img src="docs/07-profile-open.png" alt="Perfil de Instagram abierto"></td>
-  </tr>
-  <tr>
-    <td width="50%"><strong>Análisis en ejecución</strong><br><img src="docs/08-analysis-running.png" alt="Análisis en ejecución"></td>
-    <td width="50%"><strong>Análisis finalizado</strong><br><img src="docs/09-analysis-finished.png" alt="Análisis finalizado"></td>
-  </tr>
-</table>
+- seguimiento separado para varios perfiles;
+- comparación entre reportes consecutivos o no consecutivos;
+- reconstrucción de capturas históricas;
+- comparación de seguidores y seguidos;
+- estado anterior y actual por persona;
+- búsqueda y filtros;
+- historial individual;
+- actividad cronológica;
+- evolución mediante gráfica;
+- exportación JSON y CSV;
+- descarga automática de los CSV crudos de cada análisis.
 
 ## Instalación
 
-`main` es la fuente de distribución del proyecto. No se publican ejecutables ni instaladores.
+### 1. Descargar el proyecto
 
-### Opción 1: descargar el ZIP
+Desde GitHub:
 
-1. Abrí **Code** en GitHub.
-2. Pulsá **Download ZIP**.
+1. Abrí **Code**.
+2. Seleccioná **Download ZIP**.
 3. Descomprimí el repositorio.
-4. Abrí `chrome://extensions` o `edge://extensions`.
-5. Activá **Modo desarrollador**.
-6. Pulsá **Cargar descomprimida**.
-7. Seleccioná la carpeta `extension/`.
-8. Fijá Follow Tracker en la barra del navegador.
 
-### Opción 2: clonar el repositorio
+También podés clonarlo:
 
 ```bash
 git clone https://github.com/viceKDK/Follow-Tracker.git
 cd Follow-Tracker
 ```
 
-Después, cargá `extension/` como extensión descomprimida.
+### 2. Cargar la extensión
+
+1. Abrí `chrome://extensions` o `edge://extensions`.
+2. Activá **Modo desarrollador**.
+3. Pulsá **Cargar descomprimida**.
+4. Seleccioná la carpeta `extension/`.
+5. Fijá Follow Tracker en la barra del navegador.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/01-extensions.png" alt="Página de extensiones"></td>
+    <td width="50%"><img src="docs/02-dev-mode.png" alt="Modo desarrollador"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/03-load-unpacked.png" alt="Cargar extensión descomprimida"></td>
+    <td width="50%"><img src="docs/04-pin-icon.png" alt="Fijar icono de Follow Tracker"></td>
+  </tr>
+</table>
 
 ## Uso
 
@@ -168,71 +196,51 @@ Después, cargá `extension/` como extensión descomprimida.
 2. Abrí un perfil con formato `instagram.com/usuario/`.
 3. Pulsá el icono de Follow Tracker.
 4. Seleccioná **Analizar perfil actual**.
-5. Mantené la pestaña abierta mientras se recorren seguidores y seguidos.
-6. Al finalizar se descargan los dos CSV y se abre automáticamente el dashboard.
-7. Repetí el análisis más adelante para crear otra captura.
-8. Abrí **Comparar reportes** y elegí las fechas que quieras revisar.
+5. Mantené la pestaña abierta durante el recorrido.
+6. Al finalizar se guardará el reporte y se abrirá el dashboard.
+7. Desde **Antes y ahora**, elegí dos reportes para comparar las relaciones.
 
-El análisis intenta primero el modo API y, si no obtiene cobertura suficiente, utiliza el recorrido visual de las listas como fallback.
+<table>
+  <tr>
+    <td width="33%"><img src="docs/07-profile-open.png" alt="Perfil de Instagram abierto"></td>
+    <td width="33%"><img src="docs/08-analysis-running.png" alt="Análisis en curso"></td>
+    <td width="33%"><img src="docs/09-analysis-finished.png" alt="Análisis finalizado"></td>
+  </tr>
+</table>
 
-## Categorías y eventos
-
-| Categoría o evento | Significado |
-|---|---|
-| Mutuo | Ambos se siguen actualmente |
-| Te sigue; no lo seguís | La persona te sigue, pero vos no |
-| Lo seguís; no te sigue | Vos la seguís, pero ella no |
-| Te siguió | Apareció en seguidores desde el reporte anterior |
-| Te dejó de seguir | Desapareció de seguidores desde el reporte anterior |
-| Empezaste a seguir | Apareció en seguidos desde el reporte anterior |
-| Dejaste de seguir | Desapareció de seguidos desde el reporte anterior |
-| Solo en historial | Ya no aparece en las listas actuales, pero conserva eventos anteriores |
-
-Ejemplo de evento:
-
-```text
-@beto — Te dejó de seguir
-21/08/2026 15:30
-Reporte: 20260821t153000-ab123
-```
-
-## Privacidad y almacenamiento
-
-Todo se procesa y almacena en el navegador mediante `chrome.storage.local`.
-
-- No existe backend propio.
-- No se crea una cuenta de Follow Tracker.
-- No se envía el historial a servidores del proyecto.
-- Los permisos se limitan a la pestaña activa, almacenamiento, inyección del content script y acceso a `instagram.com`.
-- `unlimitedStorage` evita perder historiales grandes por la cuota local predeterminada del navegador.
-
-Borrar la extensión o usar **Borrar historial de este perfil** elimina los datos correspondientes. Las exportaciones descargadas deben borrarse manualmente cuando ya no se necesiten.
+El análisis intenta primero el modo API. Cuando no obtiene cobertura suficiente, utiliza el recorrido visual de las listas como alternativa.
 
 ## Exportaciones
 
-Cada análisis completo descarga automáticamente dos CSV identificados por el mismo `run_id`:
+Cada análisis completo descarga dos CSV crudos con el mismo identificador:
 
 ```text
 ig_auto_<perfil>_followers_<run_id>_<timestamp>.csv
 ig_auto_<perfil>_following_<run_id>_<timestamp>.csv
 ```
 
-Desde el dashboard también se pueden descargar:
+Desde el dashboard también se puede exportar:
 
-- **Backup JSON:** captura actual, línea base, reportes y eventos completos.
+- **Backup JSON:** captura actual, reportes y eventos.
 - **Actividad CSV:** usuario, evento, fecha, reporte y `run_id`.
-- **Relaciones CSV:** estado actual de cada usuario.
+- **Relaciones CSV:** estado actual de cada persona.
+
+## Privacidad
+
+Los reportes se almacenan mediante `chrome.storage.local`.
+
+- No existe un backend propio.
+- No se crea una cuenta de Follow Tracker.
+- La extensión no realiza follows, unfollows, mensajes ni acciones masivas.
+- Borrar la extensión o el historial de un perfil elimina sus datos locales.
+- Los archivos exportados deben borrarse manualmente cuando ya no se necesiten.
 
 ## Modelo de datos
 
-La extensión mantiene dos registros por perfil:
-
 ```text
-ft_history_<perfil>   -> captura completa actual
-ft_timeline_<perfil>  -> reportes y eventos históricos
+ft_history_<perfil>   → última captura completa
+ft_timeline_<perfil>  → línea base, reportes y eventos
 ```
-
-La línea temporal guarda una captura base y, después, los cambios de cada reporte. De esa forma puede reconstruir capturas antiguas sin duplicar miles de usuarios en cada ejecución.
 
 Cada reporte conserva:
 
@@ -258,35 +266,25 @@ reportId
 runId
 ```
 
-## Estructura
+La línea temporal guarda una captura base y los cambios posteriores. Con esa información puede reconstruir reportes anteriores sin duplicar miles de nombres en cada ejecución.
 
-```text
-extension/
-  manifest.json       Configuración Manifest V3
-  icons/              Iconos 16/32/48/128 px
-  background.js       Mensajería, badge y persistencia
-  content.js          Extracción API/UI y panel de progreso
-  core.js             Comparación y utilidades puras
-  history.js          Reportes, eventos y migración
-  export-policy.js    Exportaciones y enlace al dashboard
-  popup.*             Inicio rápido y acceso al comparador
-  dashboard.*         Métricas, gráficos, comparación y personas
+## Limitaciones
 
-docs/
-  dashboard-showcase.webp  Recorrido visual completo del frontend
-  dashboard-demo.png      Captura individual del dashboard
-  01-extensions.png       Página de extensiones
-  02-dev-mode.png         Modo desarrollador
-  03-load-unpacked.png    Carga de la carpeta extension
-  04-pin-icon.png         Extensión fijada
-  05-overlay.png          Panel sobre Instagram
-  07-profile-open.png     Perfil abierto
-  08-analysis-running.png Análisis en progreso
-  09-analysis-finished.png Análisis finalizado
+Instagram puede:
 
-tests/e2e/               Pruebas del flujo de extracción
-.github/workflows/ci.yml Integración continua
-```
+- imponer pausas;
+- responder con errores `429` o `503`;
+- ocultar cuentas suspendidas;
+- mostrar contadores distintos a las filas que entrega;
+- modificar su interfaz o endpoints internos.
+
+Por eso:
+
+- no se promete una duración fija;
+- no se debe cerrar la pestaña durante el análisis;
+- solamente una captura suficientemente completa actualiza el historial;
+- una cuenta privada requiere que la sesión activa tenga acceso a sus listas;
+- el recorrido visual es más lento que el modo API.
 
 ## Desarrollo
 
@@ -304,19 +302,30 @@ npm run e2e:fixture
 npm run e2e
 ```
 
-## Limitaciones conocidas
+### Estructura
 
-Instagram puede imponer pausas, devolver errores `429`/`503`, ocultar cuentas suspendidas o informar un contador distinto al número de filas entregadas. Por eso:
+```text
+extension/
+  manifest.json
+  background.js
+  content.js
+  core.js
+  history.js
+  export-policy.js
+  popup.html
+  popup.css
+  popup.js
+  dashboard.html
+  dashboard.css
+  dashboard.js
 
-- no se promete una duración fija;
-- no se debe cerrar la pestaña ni cambiar de perfil durante el análisis;
-- solo una captura con cobertura suficiente actualiza el historial;
-- una cuenta privada solo puede analizarse cuando la sesión activa tiene acceso a sus listas;
-- el modo visual es más lento que el modo API;
-- el funcionamiento puede cambiar cuando Instagram actualiza su web.
+docs/
+  capturas de instalación, análisis y frontend
 
-La extensión no realiza follows, unfollows, mensajes ni acciones masivas.
+tests/
+  pruebas unitarias y E2E
+```
 
 ## Licencia
 
-MIT. Consultá [`LICENSE`](LICENSE).
+MIT. Consulta [`LICENSE`](LICENSE).

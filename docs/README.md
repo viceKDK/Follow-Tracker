@@ -1,24 +1,26 @@
-# Capturas de Follow Tracker
+# Capturas del producto
 
-Esta carpeta contiene las imágenes utilizadas por el README para presentar el frontend, explicar la instalación manual y documentar el flujo de análisis sobre Instagram.
+Esta carpeta contiene imágenes para documentar la instalación, el análisis y el frontend de Follow Tracker.
 
 ## Frontend
 
-- `dashboard-showcase.webp`: recorrido visual completo con dashboard, comparación entre reportes, actividad, personas, vista adaptable y popup.
-- `dashboard-demo.png`: captura individual del dashboard.
+- `dashboard-showcase.webp`: captura principal de la pestaña **Antes y ahora**, donde se compara la relación anterior y actual de cada persona.
+- `dashboard-demo.png`: captura histórica del dashboard anterior.
 
-Todas las cuentas y cifras visibles en las capturas del producto son ficticias.
+La pestaña principal del producto es **Antes y ahora**. Allí se selecciona un reporte anterior y uno actual para ver cómo cambió la relación con cada persona.
 
 ## Instalación
 
-- `01-extensions.png`: página de extensiones del navegador.
+- `01-extensions.png`: página de extensiones.
 - `02-dev-mode.png`: activación del modo desarrollador.
 - `03-load-unpacked.png`: carga de la carpeta `extension/`.
-- `04-pin-icon.png`: extensión fijada en la barra.
+- `04-pin-icon.png`: fijar el icono de Follow Tracker.
 
-## Flujo de análisis
+## Análisis
 
 - `05-overlay.png`: panel flotante sobre Instagram.
-- `07-profile-open.png`: perfil listo para analizar.
-- `08-analysis-running.png`: análisis en progreso.
+- `07-profile-open.png`: perfil abierto.
+- `08-analysis-running.png`: análisis en curso.
 - `09-analysis-finished.png`: análisis finalizado.
+
+Todas las cuentas y cifras usadas para mostrar el frontend son ficticias.

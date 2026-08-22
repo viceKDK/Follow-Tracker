@@ -11,10 +11,9 @@
       <header class="brand-row">
         <div class="brand-mark" aria-hidden="true">FT</div>
         <div>
-          <p class="eyebrow">EXTENSION LOCAL</p>
+          <p class="eyebrow">SEGUIDORES ANTES Y AHORA</p>
           <h1>Follow Tracker</h1>
         </div>
-        <span class="privacy-pill"><span></span> Privado</span>
       </header>
 
       <section class="profile-card" aria-live="polite">
@@ -25,29 +24,37 @@
           </div>
           <span id="profile-state" class="state-pill">Revisando</span>
         </div>
+
         <p id="profile-help" class="profile-help">Abre un perfil de Instagram para analizarlo.</p>
+
         <div id="mini-stats" class="mini-stats" hidden>
-          <div><strong id="followers-count">0</strong><span>Seguidores</span></div>
-          <div><strong id="following-count">0</strong><span>Seguidos</span></div>
+          <div><strong id="followers-count">0</strong><span>Te siguen</span></div>
+          <div><strong id="following-count">0</strong><span>Seguís</span></div>
           <div><strong id="reports-count">0</strong><span>Reportes</span></div>
         </div>
       </section>
 
       <button id="analyze-button" class="button button-primary" type="button" disabled>
         <span class="button-icon" aria-hidden="true">↻</span>
-        <span><strong>Analizar perfil actual</strong><small>Guarda una nueva captura y detecta cambios</small></span>
+        <span>
+          <strong>Analizar perfil actual</strong>
+          <small>Guarda una captura nueva para detectar cambios</small>
+        </span>
       </button>
 
       <button id="dashboard-button" class="button button-secondary" type="button">
-        <span class="button-icon" aria-hidden="true">⌁</span>
-        <span><strong>Abrir dashboard</strong><small>Historial, fechas, personas y exportaciones</small></span>
+        <span class="button-icon" aria-hidden="true">⇆</span>
+        <span>
+          <strong>Ver antes y ahora</strong>
+          <small>Compara reportes y revisa cada relación</small>
+        </span>
         <span aria-hidden="true">→</span>
       </button>
 
       <div id="message" class="message" hidden></div>
 
       <footer>
-        <span>Los datos quedan en este navegador.</span>
+        <span>Compará seguidores y seguidos por fecha.</span>
         <button id="open-instagram" class="text-button" type="button">Abrir Instagram</button>
       </footer>
     </main>
