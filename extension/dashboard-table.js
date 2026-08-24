@@ -1,7 +1,13 @@
 "use strict";
 
 (function loadDashboardEnhancements() {
-  const files = ["product-core.js", "dashboard-ux.js", "dashboard-product.js"];
+  const files = [
+    "product-core.js",
+    "maintenance.js",
+    "dashboard-ux.js",
+    "dashboard-product.js",
+    "dashboard-maintenance.js",
+  ];
 
   function loadAt(index) {
     if (index >= files.length) return;

@@ -23,6 +23,10 @@ La pestaña principal del producto es **Antes y ahora**. Allí se selecciona un 
 - `08-analysis-running.png`: análisis en curso.
 - `09-analysis-finished.png`: análisis finalizado.
 
+## Recuperación
+
+- `RECOVERY.md`: cómo deshacer el último reporte, restaurarlo una vez y evitar sobrescribir análisis posteriores.
+
 ## Calidad
 
 - `FINAL-QA.md`: checklist de instalación, análisis, comparaciones, volumen, backup, privacidad, accesibilidad y release.

@@ -1,0 +1,133 @@
+/* Recovery controls for reverting the latest complete report. */
+
+.report-recovery-panel {
+  margin-top: 24px;
+}
+
+.recovery-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.recovery-heading h2 {
+  margin: 3px 0 6px;
+}
+
+.recovery-heading p {
+  margin: 0;
+  color: #667085;
+}
+
+.rollback-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.rollback-summary article {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.rollback-summary span,
+.rollback-summary small {
+  display: block;
+  color: #667085;
+}
+
+.rollback-summary strong {
+  display: block;
+  margin: 5px 0 3px;
+  overflow: hidden;
+  color: #17213b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rollback-arrow {
+  color: #2f6df6;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.recovery-empty {
+  grid-column: 1 / -1;
+  padding: 14px;
+  border: 1px dashed #d7deea;
+  border-radius: 12px;
+  color: #667085;
+  text-align: center;
+}
+
+.recovery-point {
+  display: grid;
+  gap: 3px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #a9e2cf;
+  border-radius: 11px;
+  background: #ecfaf5;
+  color: #126b53;
+}
+
+.recovery-point span {
+  color: inherit;
+  font-size: 13px;
+}
+
+.recovery-point.stale {
+  border-color: #f3d39a;
+  background: #fff8e8;
+  color: #8a5a0b;
+}
+
+.recovery-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.rollback-status {
+  min-height: 20px;
+  margin: 10px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.rollback-status.success { color: #126b53; }
+.rollback-status.warning { color: #8a5a0b; }
+.rollback-status.error { color: #9f2e43; }
+
+@media (max-width: 720px) {
+  .recovery-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rollback-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .rollback-arrow {
+    transform: rotate(90deg);
+    text-align: center;
+  }
+
+  .recovery-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recovery-actions .button {
+    width: 100%;
+  }
+}
