@@ -2,6 +2,16 @@ importScripts("core.js", "history.js");
 
 const HISTORY_PREFIX = "ft_history_";
 const TIMELINE_PREFIX = "ft_timeline_";
+const CONTENT_FILES = [
+  "core.js",
+  "trust-core.js",
+  "capture-store.js",
+  "instagram-api.js",
+  "instagram-ui.js",
+  "analysis-overlay.js",
+  "analysis-controller.js",
+  "content-entry.js",
+];
 
 function timelineKeyForHistoryKey(historyKey) {
   return `${TIMELINE_PREFIX}${historyKey.slice(HISTORY_PREFIX.length)}`;
@@ -23,6 +33,18 @@ function migrateLegacyStorage() {
         }
       });
 
+    if (!items.ft_settings) {
+      updates.ft_settings = {
+        minTrustedCoverage: 0.95,
+        minHardCoverage: 0.8,
+        maxTrustedDropRatio: 0.15,
+        confirmRemovalsAfter: 2,
+        autoAcceptTrusted: false,
+        backupReminderDays: 30,
+        backupReminderReports: 5,
+      };
+    }
+
     if (Object.keys(updates).length > 0) chrome.storage.local.set(updates);
     if (legacyKeys.length > 0) chrome.storage.local.remove(legacyKeys);
   });
@@ -32,6 +54,8 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.action.setBadgeBackgroundColor({ color: "#7557ff" });
   migrateLegacyStorage();
 });
+
+chrome.runtime.onStartup.addListener(migrateLegacyStorage);
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
@@ -63,12 +87,12 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 function sendMessageToTab(tabId, message) {
   return new Promise((resolve) => {
     chrome.tabs.sendMessage(tabId, message, (response) => {
-      const err = chrome.runtime.lastError;
-      if (err) {
-        resolve({ ok: false, error: err.message });
+      const error = chrome.runtime.lastError;
+      if (error) {
+        resolve({ ok: false, error: error.message });
         return;
       }
-      resolve(response || { ok: false, error: "No response." });
+      resolve(response || { ok: false, error: "Sin respuesta." });
     });
   });
 }
@@ -77,9 +101,12 @@ async function ensureContentLoaded(tabId) {
   const ping = await sendMessageToTab(tabId, { type: "PING" });
   if (ping.ok) return ping;
   try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["core.js", "content.js", "export-policy.js"] });
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: CONTENT_FILES,
+    });
   } catch (error) {
-    return { ok: false, error: `No se pudo cargar la extension: ${error.message || error}` };
+    return { ok: false, error: `No se pudo cargar la extensión: ${error.message || error}` };
   }
   return sendMessageToTab(tabId, { type: "PING" });
 }
@@ -90,8 +117,6 @@ async function startAnalysisInTab(tabId) {
   const shown = await sendMessageToTab(tabId, { type: "SHOW_OVERLAY" });
   if (!shown.ok) return shown;
 
-  // El analisis puede durar varios minutos. Lo iniciamos y respondemos al
-  // popup enseguida para que se cierre mientras el panel flotante continua.
   sendMessageToTab(tabId, { type: "START_ANALYSIS" }).catch(() => {});
   return { ok: true, started: true };
 }
@@ -126,13 +151,14 @@ function profileFromTabUrl(tabUrl) {
   }
 }
 
-function openDashboardTab(profile) {
+function openDashboardTab(profile, hash) {
   const safe = FollowTrackerCore.safeProfile(profile || "");
   const now = Date.now();
   if (dashboardOpenTimes.has(safe) && now - dashboardOpenTimes.get(safe) < 1500) return;
   dashboardOpenTimes.set(safe, now);
   const query = profile ? `?profile=${encodeURIComponent(safe)}` : "";
-  chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${query}`) });
+  const targetHash = hash ? `#${String(hash).replace(/^#/, "")}` : "";
+  chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${query}${targetHash}`) });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -167,16 +193,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "OPEN_DASHBOARD") {
-    openDashboardTab(message.profile || "");
+    openDashboardTab(message.profile || "", message.hash || "");
     sendResponse({ ok: true });
     return undefined;
   }
 
   if (message.source === "content") {
     const tabId = sender && sender.tab && sender.tab.id;
+    if (message.type === "capture-saved") {
+      const targetProfile = message.profile || profileFromTabUrl(sender && sender.tab && sender.tab.url);
+      setTimeout(() => openDashboardTab(targetProfile, "overview"), 350);
+    }
     if (message.type === "legacy-report-suppressed") {
-      const profile = message.profile || profileFromTabUrl(sender && sender.tab && sender.tab.url);
-      openDashboardTab(profile);
+      const targetProfile = message.profile || profileFromTabUrl(sender && sender.tab && sender.tab.url);
+      openDashboardTab(targetProfile, "overview");
     }
     if (message.type === "badge" && tabId) {
       setBadgeFor(tabId, message.text, message.color);
