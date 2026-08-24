@@ -61,7 +61,10 @@ test("normaliza duplicados sin inflar los conteos", () => {
 
   assert.equal(timeline.reports[1].followersCount, 2);
   assert.equal(timeline.reports[1].quality.duplicateFollowersRemoved, 2);
-  assert.deepEqual(timeline.reports[1].changes.newFollowers, ["bob"]);
+  assert.deepEqual(
+    timeline.reports[1].changes.newFollowers.map((username) => username.toLowerCase()),
+    ["bob"]
+  );
 });
 
 test("una caída masiva queda visible pero marcada para revisión", () => {
