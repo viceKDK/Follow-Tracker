@@ -1,179 +1,351 @@
-# Follow Tracker 2.1 — checklist final de QA
+# Follow Tracker 3.0 — checklist final de QA
 
-Este documento define la validación mínima antes de considerar una versión lista para uso real. La prioridad es evitar falsos unfollows, pérdida de historial, descargas involuntarias y bloqueos del dashboard con listas grandes.
+Este documento define la validación mínima antes de publicar o distribuir Follow Tracker 3.0. La prioridad es evitar falsos unfollows, pérdida de historial, identidades duplicadas, descargas involuntarias y daños al eliminar reportes.
 
-## 1. Instalación y permisos
+## 1. Instalación y migración
 
 - [ ] Cargar `extension/` como extensión descomprimida en Chrome.
 - [ ] Repetir la carga en Microsoft Edge.
-- [ ] Confirmar que Manifest V3 se acepta sin advertencias de archivos faltantes.
-- [ ] Confirmar que los únicos permisos son `activeTab`, `storage`, `scripting` y `unlimitedStorage`.
-- [ ] Confirmar que el host permitido se limita a `instagram.com`.
-- [ ] Confirmar que el popup abre sin errores de consola.
-- [ ] Confirmar que el dashboard abre desde el popup y desde la página de opciones.
+- [ ] Confirmar que Manifest V3 se acepta sin archivos faltantes.
+- [ ] Confirmar versión `3.0.0` en Manifest y package.
+- [ ] Confirmar que los permisos se limitan a `activeTab`, `storage`, `scripting` y `unlimitedStorage`.
+- [ ] Confirmar que los hosts se limitan a las dos variantes de `instagram.com`.
+- [ ] Actualizar desde una instalación 2.x con perfiles reales.
+- [ ] Confirmar que `ft_history_*` y `ft_timeline_*` anteriores siguen visibles.
+- [ ] Confirmar que reportes anteriores aparecen como **heredados**, sin inventar puntaje de calidad.
+- [ ] Confirmar que `ft_settings` se crea con dos capturas para confirmar bajas.
+- [ ] Confirmar que el popup y el dashboard abren sin errores de consola.
 
-## 2. Primer análisis
+## 2. Captura pendiente y revisión
 
 - [ ] Abrir un perfil público con seguidores y seguidos.
 - [ ] Iniciar el análisis desde el popup.
-- [ ] Confirmar que aparece el panel flotante.
+- [ ] Confirmar que aparece el panel 3.0.
 - [ ] Confirmar que el progreso diferencia seguidores y seguidos.
-- [ ] Cancelar una ejecución y comprobar que no reemplaza la captura válida.
-- [ ] Ejecutar nuevamente y completar el análisis.
-- [ ] Confirmar que se crea `ft_history_<perfil>`.
-- [ ] Confirmar que se crea `ft_timeline_<perfil>`.
-- [ ] Confirmar que la primera captura aparece como línea base.
+- [ ] Confirmar que, al terminar, aparece **Revisá antes de guardar**.
+- [ ] Antes de guardar, confirmar que `ft_history_<perfil>` todavía conserva la captura anterior.
+- [ ] Confirmar que existe `ft_pending_capture_<perfil>`.
+- [ ] Recargar Instagram y comprobar que la revisión pendiente reaparece.
+- [ ] Pulsar **Descartar** y comprobar que el historial anterior no cambia.
+- [ ] Repetir el análisis y pulsar **Guardar reporte**.
+- [ ] Confirmar que desaparece la captura pendiente.
+- [ ] Confirmar que se actualiza snapshot y timeline.
+- [ ] Confirmar que el dashboard se abre tras guardar.
 - [ ] Confirmar que no aparece ningún archivo automático en Descargas.
 
-## 3. Capturas incompletas y errores de Instagram
+## 3. Evidencia de calidad
 
-- [ ] Simular `429` y verificar espera/reintento controlado.
-- [ ] Simular `503` y verificar mensaje comprensible.
-- [ ] Interrumpir la red durante seguidores.
-- [ ] Interrumpir la red durante seguidos.
-- [ ] Confirmar que una lista con cobertura insuficiente no genera falsos cambios.
-- [ ] Confirmar que una cuenta con cero seguidores y cero seguidos se acepta cuando Instagram informa ambos contadores en cero.
-- [ ] Confirmar fallback visual cuando la API no entrega cobertura suficiente.
-- [ ] Cambiar de perfil durante el análisis y verificar cancelación segura.
-- [ ] Cerrar la pestaña durante el análisis y confirmar que el último historial válido sigue intacto.
+Validar una captura confiable:
 
-## 4. Segundo análisis y eventos
+- [ ] fuente correcta: API, UI o archivo oficial;
+- [ ] contador esperado correcto;
+- [ ] cantidad recolectada correcta;
+- [ ] cobertura de seguidores;
+- [ ] cobertura de seguidos;
+- [ ] duración;
+- [ ] cantidad de reintentos;
+- [ ] advertencias;
+- [ ] cambios detectados;
+- [ ] puntaje y estado.
 
-Preparar dos capturas controladas donde exista al menos un caso de cada tipo:
+Validar capturas problemáticas:
 
-- [ ] una persona empieza a seguirte;
-- [ ] una persona te deja de seguir;
-- [ ] empezás a seguir a una persona;
-- [ ] dejás de seguir a una persona;
-- [ ] una relación pasa de mutua a “lo seguís; no te sigue”;
-- [ ] una relación pasa de mutua a “te sigue; no lo seguís”;
-- [ ] dos personas pasan a seguirse mutuamente;
-- [ ] dos personas dejan de seguirse.
+- [ ] cobertura entre 80 % y 95 %: estado **Revisar**;
+- [ ] cobertura menor al 80 %: estado **Rechazada**;
+- [ ] caída superior al umbral: estado **Revisar**;
+- [ ] cuenta con contador `0/0`: captura confiable cuando ambas listas están vacías;
+- [ ] captura rechazada: botón Guardar normal deshabilitado;
+- [ ] captura rechazada: se puede conservar explícitamente como sospechosa;
+- [ ] reporte sospechoso visible en Resumen y Administrar;
+- [ ] edición manual del estado de confianza desde Administrar.
 
-Verificar que:
+## 4. API, reintentos y fallback visual
 
-- [ ] cada evento se crea una sola vez;
-- [ ] el evento conserva `reportId` y `runId`;
-- [ ] repetir la misma captura no duplica el reporte;
-- [ ] la actividad se ordena desde el evento más reciente;
-- [ ] la fecha se presenta como fecha de detección, no como instante exacto del cambio.
+- [ ] Simular `429` y verificar backoff.
+- [ ] Simular `502`, `503` y `504`.
+- [ ] Simular timeout del perfil.
+- [ ] Simular timeout de followers.
+- [ ] Simular timeout de following.
+- [ ] Cancelar durante el backoff.
+- [ ] Confirmar que cancelar no guarda snapshot ni pending corrupto.
+- [ ] Forzar fallo de API y comprobar cambio al recorrido visual.
+- [ ] Confirmar que el fallback abre followers y following.
+- [ ] Confirmar extracción de enlaces visibles.
+- [ ] Confirmar fallback de filas sin enlace.
+- [ ] Confirmar cierre del diálogo y regreso al perfil.
+- [ ] Cambiar de perfil durante la captura y confirmar cancelación segura.
 
-## 5. Antes y ahora
+## 5. Confirmación de bajas
 
-- [ ] Comparar el último reporte con el anterior.
-- [ ] Comparar el primer reporte con el último.
-- [ ] Comparar dos reportes intermedios.
-- [ ] Confirmar que el selector normaliza el orden anterior → actual.
-- [ ] Confirmar las columnas “Antes” y “Ahora” para cada persona.
-- [ ] Confirmar los mensajes de cambio exactos.
-- [ ] Probar búsqueda con y sin `@`.
-- [ ] Probar todos los filtros rápidos.
-- [ ] Probar filtro por estado actual.
-- [ ] Probar filtro por tipo exacto de cambio.
-- [ ] Probar orden ascendente y descendente por cada columna.
+Con `confirmRemovalsAfter = 2`:
+
+- [ ] Reporte 1: la persona aparece.
+- [ ] Reporte 2: la persona falta; se mantiene en el snapshot y queda pendiente `1/2`.
+- [ ] Confirmar que el Reporte 2 no crea evento `unfollowed_you`.
+- [ ] Reporte 3: la persona sigue faltando; se elimina y se confirma la baja.
+- [ ] Confirmar evento `unfollowed_you` solamente en Reporte 3.
+- [ ] Hacer que la persona reaparezca antes del Reporte 3 y comprobar que se cancela la ausencia.
+- [ ] Repetir el flujo para una cuenta que el usuario dejó de seguir.
+- [ ] Cambiar la configuración a 1, 3 y 5 capturas.
+- [ ] Confirmar que el contador pendiente se conserva entre reinicios del navegador.
+
+## 6. Identidad estable y cambios de username
+
+- [ ] Captura 1: ID `123`, username `nombre_viejo`.
+- [ ] Captura 2: ID `123`, username `nombre_nuevo`.
+- [ ] Confirmar una sola identidad `id:123`.
+- [ ] Confirmar username canónico `nombre_viejo`.
+- [ ] Confirmar username actual `nombre_nuevo`.
+- [ ] Confirmar ambos alias.
+- [ ] Confirmar que no existe baja de `nombre_viejo`.
+- [ ] Confirmar que no existe alta independiente de `nombre_nuevo`.
+- [ ] Confirmar que el dashboard muestra `@nombre_nuevo` y “Antes @nombre_viejo”.
+- [ ] Confirmar que el enlace abre el username actual.
+- [ ] Confirmar que buscar el alias anterior encuentra la persona.
+- [ ] Probar una fila sin ID y comprobar fallback por username.
+- [ ] Unir manualmente dos usernames desde Administrar.
+- [ ] Confirmar que snapshots históricos, eventos, notas y tags se fusionan.
+
+## 7. Importación oficial de Instagram
+
+- [ ] Seleccionar `followers_1.json`.
+- [ ] Seleccionar varios `followers_N.json`.
+- [ ] Seleccionar `following.json`.
+- [ ] Probar la variante `relationships_following`.
+- [ ] Probar la variante `following_accounts`.
+- [ ] Confirmar deduplicación entre archivos.
+- [ ] Confirmar vista previa con totales.
+- [ ] Rechazar JSON roto sin modificar datos.
+- [ ] Ignorar archivo no clasificable con advertencia.
+- [ ] Guardar el reporte oficial.
+- [ ] Confirmar fuente `instagram_export`.
+- [ ] Confirmar cobertura 100 % respecto a las listas importadas.
+- [ ] Confirmar aplicación de identidad y bajas pendientes.
+- [ ] Confirmar comparación con reportes API/UI existentes.
+
+## 8. Antes y ahora
+
+- [ ] Comparar último reporte con anterior.
+- [ ] Comparar primero con último.
+- [ ] Comparar reportes intermedios.
+- [ ] Confirmar orden anterior → actual.
+- [ ] Confirmar columnas de relación anterior y actual.
+- [ ] Confirmar frases de cambio exactas.
+- [ ] Buscar con y sin `@`.
+- [ ] Buscar username actual.
+- [ ] Buscar alias anterior.
+- [ ] Probar filtros rápidos.
+- [ ] Probar estado actual.
+- [ ] Probar tipo exacto de cambio.
+- [ ] Probar orden por todas las columnas.
 - [ ] Probar densidad compacta y normal.
-- [ ] Abrir una fila mediante clic, Enter y Espacio.
-- [ ] Cerrar el panel lateral con botón, fondo y Escape.
-- [ ] Confirmar que el CSV exportado respeta todos los filtros activos.
+- [ ] Probar páginas de 100, 250 y 500.
+- [ ] Abrir una fila con clic, Enter y Espacio.
+- [ ] Cerrar panel con botón, fondo y Escape.
+- [ ] Exportar CSV y confirmar que respeta filtros activos.
 
-## 6. Personas
+## 9. Personas, notas, etiquetas y fijados
 
-- [ ] Buscar una cuenta existente.
-- [ ] Buscar una cuenta inexistente.
-- [ ] Probar los seis filtros.
-- [ ] Ordenar por usuario, relación, cambios y último evento.
-- [ ] Abrir una persona con historial.
-- [ ] Abrir una persona sin eventos históricos.
-- [ ] Confirmar el enlace a Instagram.
-- [ ] Confirmar que una cuenta que ya no aparece en ninguna lista sigue disponible como histórica.
+- [ ] Abrir persona con historial.
+- [ ] Abrir persona sin eventos.
+- [ ] Guardar una nota.
+- [ ] Guardar una etiqueta.
+- [ ] Guardar varias etiquetas.
+- [ ] Confirmar máximo de 12 etiquetas.
+- [ ] Fijar persona.
+- [ ] Confirmar estrella en la tabla.
+- [ ] Confirmar tags visibles.
+- [ ] Filtrar por **Fijados**.
+- [ ] Desfijar y comprobar salida del filtro.
+- [ ] Cambiar de persona y confirmar que el mensaje de guardado no se mezcla con los alias.
+- [ ] Cerrar y reabrir dashboard; confirmar persistencia.
+- [ ] Exportar/importar backup; confirmar restauración de notas y fijados.
 
-## 7. Actividad
+## 10. Actividad
 
-- [ ] Buscar por usuario.
+- [ ] Buscar por usuario actual.
 - [ ] Buscar por ID de reporte.
-- [ ] Filtrar por cada tipo de evento.
-- [ ] Filtrar por un reporte específico.
-- [ ] Filtrar por fecha desde.
-- [ ] Filtrar por fecha hasta.
-- [ ] Combinar búsqueda, tipo, reporte y fechas.
-- [ ] Probar tamaños de página 50, 100, 250 y 500.
-- [ ] Navegar entre páginas sin repetir ni perder eventos.
-- [ ] Limpiar filtros.
-- [ ] Exportar la vista filtrada y comprobar el contenido.
+- [ ] Filtrar por cada evento.
+- [ ] Filtrar por reporte.
+- [ ] Filtrar por fecha desde y hasta.
+- [ ] Combinar todos los filtros.
+- [ ] Probar páginas de 50, 100, 250 y 500.
+- [ ] Navegar sin repetir ni perder eventos.
+- [ ] Exportar la vista filtrada.
+- [ ] Confirmar que la fecha se presenta como fecha de detección.
 
-## 8. Volumen y rendimiento
+## 11. Administración de perfiles
 
-Usar datos sintéticos o un backup de prueba grande.
+- [ ] Ver todos los perfiles.
+- [ ] Confirmar total de reportes.
+- [ ] Confirmar personas actuales.
+- [ ] Confirmar tamaño local estimado.
+- [ ] Guardar etiqueta local.
+- [ ] Archivar perfil.
+- [ ] Desarchivar perfil.
+- [ ] Abrir perfil desde Administrar.
+- [ ] Exportar perfil.
+- [ ] Eliminar perfil y todos sus sidecars.
+- [ ] Confirmar que eliminar uno no afecta otro.
 
-- [ ] 10.000 personas en la captura actual.
-- [ ] 100.000 eventos en la línea temporal.
-- [ ] 400 reportes.
-- [ ] Abrir Antes y ahora sin congelamiento prolongado.
-- [ ] Cambiar filtros y páginas sin bloquear el navegador.
-- [ ] Abrir Personas y ordenar una columna.
-- [ ] Abrir Actividad y cambiar a 500 filas por página.
-- [ ] Confirmar que nunca se intentan insertar todas las filas en el DOM simultáneamente.
-- [ ] Confirmar que exportar una vista grande no modifica el historial.
+## 12. Fusión de perfiles
 
-## 9. Backup y restauración
+- [ ] Preparar dos perfiles del mismo usuario con fechas distintas.
+- [ ] Fusionar origen dentro de destino.
+- [ ] Confirmar orden cronológico.
+- [ ] Confirmar deduplicación de report IDs.
+- [ ] Confirmar recalculado de deltas.
+- [ ] Confirmar unión de metadatos de calidad.
+- [ ] Confirmar unión de identidades.
+- [ ] Confirmar unión de notas y fijados.
+- [ ] Confirmar eliminación de todas las claves del origen.
+- [ ] Confirmar backup del destino fusionado.
 
-- [ ] Exportar Backup JSON.
-- [ ] Borrar el historial del perfil.
-- [ ] Importar el backup.
-- [ ] Confirmar captura, reportes, eventos y comparaciones restauradas.
-- [ ] Importar un snapshot heredado sin timeline y confirmar creación de línea base.
+## 13. Administración de reportes
+
+- [ ] Editar etiqueta de un reporte.
+- [ ] Editar nota breve.
+- [ ] Cambiar estado de confianza.
+- [ ] Confirmar fuente y puntaje.
+- [ ] Eliminar el último reporte mediante Administrar.
+- [ ] Eliminar un reporte intermedio.
+- [ ] Confirmar que el timeline conserva los restantes.
+- [ ] Confirmar que el snapshot actual sigue coincidiendo con el último reporte.
+- [ ] Confirmar recalculado correcto de eventos/deltas posteriores.
+- [ ] Confirmar que recovery y backup status se invalidan tras reconstruir.
+- [ ] Impedir eliminar el único reporte.
+
+## 14. Rollback rápido
+
+- [ ] Deshacer el último reporte.
+- [ ] Confirmar snapshot anterior exacto.
+- [ ] Confirmar eliminación de eventos del reporte deshecho.
+- [ ] Confirmar creación de `ft_recovery_*`.
+- [ ] Restaurar una vez.
+- [ ] Confirmar eliminación del recovery después de restaurar.
+- [ ] Crear un reporte nuevo después del rollback y confirmar recovery obsoleto.
+- [ ] Descartar recovery obsoleto.
+- [ ] Borrar perfil y confirmar eliminación del recovery.
+
+## 15. Backup y restauración
+
+### Perfil individual
+
+- [ ] Exportar backup completo.
+- [ ] Confirmar snapshot y timeline.
+- [ ] Confirmar capture metadata.
+- [ ] Confirmar identity registry.
+- [ ] Confirmar absence state.
+- [ ] Confirmar people metadata.
+- [ ] Confirmar profile metadata.
+- [ ] Confirmar settings.
+- [ ] Borrar perfil y restaurar.
+- [ ] Confirmar paridad completa.
+
+### Espacio de trabajo
+
+- [ ] Exportar todos los perfiles.
+- [ ] Confirmar lista de perfiles.
+- [ ] Restaurar en almacenamiento vacío.
+- [ ] Confirmar settings globales.
+- [ ] Probar reemplazo de perfil existente.
+- [ ] Cancelar reemplazo.
+
+### Compatibilidad
+
+- [ ] Importar backup 2.x con snapshot/timeline.
+- [ ] Importar snapshot heredado sin timeline.
 - [ ] Rechazar JSON inválido.
-- [ ] Rechazar backup sin `followers` o `following`.
-- [ ] Rechazar captura y timeline de perfiles distintos.
+- [ ] Rechazar perfiles mezclados.
 - [ ] Rechazar timeline con reportes y sin baseline.
-- [ ] Pedir confirmación antes de reemplazar un perfil existente.
-- [ ] Rechazar archivos de más de 100 MB con mensaje comprensible.
+- [ ] Rechazar archivo mayor de 100 MB.
 
-## 10. Salud del historial
+### Recordatorio
 
-- [ ] Historial consistente: puntaje 100 y estado saludable.
-- [ ] Perfil mezclado: estado de error.
-- [ ] Baseline ausente: estado de error.
-- [ ] Usuario duplicado: advertencia.
-- [ ] ID de reporte duplicado: advertencia.
-- [ ] ID de evento duplicado: advertencia.
-- [ ] Evento con tipo desconocido: advertencia.
-- [ ] Total del último reporte distinto a la captura: advertencia.
-- [ ] Descargar diagnóstico JSON.
+- [ ] Sin backup previo: aviso visible.
+- [ ] Cinco reportes nuevos: aviso visible.
+- [ ] Treinta días: aviso visible.
+- [ ] Exportar y confirmar estado “Backup al día”.
 
-## 11. Exportaciones y seguridad de CSV
+## 16. Salud estructural y calidad de captura
 
-- [ ] Ningún análisis genera CSV o XLS automáticamente.
-- [ ] Backup JSON se descarga solo al pulsar Exportar.
-- [ ] Actividad CSV se descarga solo al pulsar Exportar.
-- [ ] Relaciones CSV se descarga solo al pulsar Exportar.
-- [ ] Comparación y actividad filtrada se descargan solo desde sus botones.
-- [ ] Un username que empiece con `=`, `+`, `-` o `@` no se interpreta como fórmula en Excel.
-- [ ] Comas, comillas y saltos de línea se escapan correctamente.
+No confundir ambos conceptos.
 
-## 12. Privacidad y borrado
+### Salud estructural
 
-- [ ] No se realizan solicitudes a servidores propios.
-- [ ] No se envían snapshots a analytics.
-- [ ] No se guarda contraseña de Instagram.
-- [ ] No existen acciones de follow/unfollow/mensajería.
-- [ ] Borrar un perfil elimina `ft_history_<perfil>` y `ft_timeline_<perfil>`.
-- [ ] Borrar un perfil no elimina datos de otros perfiles.
-- [ ] La UI explica que borrar no modifica Instagram.
+- [ ] Historial consistente: 100/100.
+- [ ] Perfil mezclado: error.
+- [ ] Baseline ausente: error.
+- [ ] IDs duplicados: advertencia.
+- [ ] Fecha inválida: advertencia.
+- [ ] Descargar diagnóstico.
 
-## 13. Accesibilidad y responsive
+### Calidad de captura
 
-- [ ] Navegar el dashboard solamente con teclado.
-- [ ] Confirmar foco visible en botones, tablas, inputs y selects.
-- [ ] Confirmar que los tabs informan `aria-selected`.
-- [ ] Probar ancho 1440 px.
-- [ ] Probar ancho 1024 px.
-- [ ] Probar ancho 768 px.
-- [ ] Probar ancho 390 px.
-- [ ] Confirmar scroll horizontal controlado para tablas.
-- [ ] Confirmar comportamiento con `prefers-reduced-motion`.
+- [ ] Fuente visible.
+- [ ] Cobertura visible.
+- [ ] Puntaje visible.
+- [ ] Razones visibles.
+- [ ] Renombres visibles.
+- [ ] Bajas pendientes visibles.
+- [ ] Reporte heredado no recibe evidencia inventada.
 
-## 14. Automatización obligatoria
+## 17. Volumen y rendimiento
+
+- [ ] 10.000 personas actuales.
+- [ ] 100.000 eventos.
+- [ ] 400 reportes.
+- [ ] 10.000 identidades con alias.
+- [ ] 1.000 notas/fijados.
+- [ ] Abrir tablas sin congelamiento prolongado.
+- [ ] Filtrar y ordenar con fluidez aceptable.
+- [ ] Usar 500 filas por página.
+- [ ] Importar JSON oficial grande.
+- [ ] Exportar backup completo grande.
+- [ ] Fusionar dos timelines grandes sin pérdida.
+- [ ] Confirmar que no se insertan todas las filas en el DOM.
+
+## 18. Exportaciones y CSV
+
+- [ ] Ningún análisis crea CSV/XLS/JSON automáticamente.
+- [ ] No existen `content.js` ni `export-policy.js` en el paquete.
+- [ ] Backup se descarga solo mediante acción explícita.
+- [ ] Actividad CSV solo mediante acción explícita.
+- [ ] Relaciones CSV solo mediante acción explícita.
+- [ ] Comparación CSV respeta filtros.
+- [ ] Actividad filtrada respeta filtros.
+- [ ] Diagnóstico JSON mediante acción explícita.
+- [ ] Neutralizar celdas que empiezan con `=`, `+`, `-` o `@`.
+- [ ] Escapar comas, comillas y saltos de línea.
+
+## 19. Privacidad y seguridad
+
+- [ ] No hay backend propio.
+- [ ] No hay analytics de seguidores.
+- [ ] No se guarda contraseña.
+- [ ] No hay follow/unfollow.
+- [ ] No hay mensajes ni publicaciones.
+- [ ] No hay código remoto.
+- [ ] No hay `eval()` ni `new Function()`.
+- [ ] Datos en `chrome.storage.local`.
+- [ ] Archivos oficiales procesados localmente.
+- [ ] Notas privadas incluidas solamente en backup explícito.
+- [ ] Política de privacidad coincide con el comportamiento real.
+
+## 20. Accesibilidad y responsive
+
+- [ ] Navegar popup con teclado.
+- [ ] Navegar overlay con teclado.
+- [ ] Navegar dashboard con teclado.
+- [ ] Foco visible.
+- [ ] Tabs con `aria-selected`.
+- [ ] Estado de guardado con `aria-live`.
+- [ ] Revisión usable a 390 px.
+- [ ] Dashboard a 390, 768, 1024 y 1440 px.
+- [ ] Scroll horizontal controlado para tablas.
+- [ ] `prefers-reduced-motion` respetado.
+
+## 21. Empaquetado y release
 
 ```bash
 npm ci
@@ -182,17 +354,33 @@ npm test
 npm run check
 npm run e2e:fixture
 npm run e2e
+npm run package
 ```
 
-Todos los comandos deben finalizar con código 0 antes de publicar una versión.
+Confirmar:
+
+- [ ] todos los comandos terminan en 0;
+- [ ] `dist/follow-tracker-3.0.0.zip` existe;
+- [ ] ZIP no contiene tests;
+- [ ] ZIP no contiene archivos heredados;
+- [ ] ZIP contiene política/runtime necesarios;
+- [ ] SHA-256 coincide;
+- [ ] `release-manifest.json` lista archivos correctos;
+- [ ] instalar directamente desde el contenido del ZIP;
+- [ ] workflow de tag `v*` genera artifact y release;
+- [ ] ficha de tienda coincide con permisos y funciones.
 
 ## Criterio de salida
 
-La versión puede considerarse lista cuando:
+Follow Tracker 3.0 puede considerarse listo cuando:
 
-1. no genera falsos unfollows con capturas incompletas;
-2. no descarga archivos automáticamente;
-3. puede restaurar un backup válido;
-4. mantiene fluidez con listas grandes gracias a la paginación;
-5. detecta inconsistencias de almacenamiento;
-6. todas las pruebas automatizadas y manuales críticas están aprobadas.
+1. ninguna captura modifica el historial antes de una decisión;
+2. una captura parcial no inventa bajas confirmadas;
+3. un cambio de username con ID estable conserva una persona;
+4. la importación oficial produce reportes comparables;
+5. eliminar un reporte intermedio reconstruye el timeline;
+6. perfiles, notas, identidades y configuración se restauran desde backup;
+7. el análisis no genera descargas automáticas;
+8. el paquete final contiene solamente el runtime necesario;
+9. CI completa unitarios, navegador y packaging;
+10. la validación manual con una sesión real de Instagram no presenta errores críticos.
