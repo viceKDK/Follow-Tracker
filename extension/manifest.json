@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Follow Tracker - Antes y ahora",
   "description": "Guarda capturas locales, compara seguidores y seguidos entre fechas y exporta únicamente cuando vos lo pedís.",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "permissions": [
     "activeTab",
     "storage",
