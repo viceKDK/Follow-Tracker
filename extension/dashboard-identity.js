@@ -208,11 +208,12 @@
     link.insertAdjacentHTML("beforebegin", `
       <section id="person-meta-editor" class="person-meta-editor">
         <h3>Notas privadas</h3>
+        <div id="person-identity-status" class="person-meta-status"></div>
         <label class="person-meta-check"><input id="person-meta-pinned" type="checkbox"> Fijar esta persona</label>
         <label>Etiquetas<input id="person-meta-tags" type="text" placeholder="amistad, trabajo, familia"></label>
         <label>Nota<textarea id="person-meta-note" placeholder="Información que quieras recordar. Solo se guarda en tu navegador."></textarea></label>
         <button id="person-meta-save" class="button button-secondary" type="button">Guardar nota</button>
-        <div id="person-meta-status" class="person-meta-status"></div>
+        <div id="person-meta-status" class="person-meta-status" role="status" aria-live="polite"></div>
       </section>`);
   }
 
@@ -222,6 +223,7 @@
     if (!editor) return;
     const canonical = canonicalFor(canonicalValue);
     if (!canonical) return;
+    const previousCanonical = Trust.normalizeUsername(editor.dataset.canonical || "");
     const meta = metadataFor(canonical);
     const signature = JSON.stringify({ canonical, pinned: meta.pinned, tags: meta.tags, note: meta.note });
     if (editor.dataset.signature === signature && document.activeElement?.closest("#person-meta-editor")) return;
@@ -232,15 +234,20 @@
     document.querySelector("#person-meta-tags").value = meta.tags.join(", ");
     document.querySelector("#person-meta-note").value = meta.note;
     const record = recordFor(canonical);
-    document.querySelector("#person-meta-status").textContent = record && record.previousUsernames.length > 1
+    document.querySelector("#person-identity-status").textContent = record && record.previousUsernames.length > 1
       ? `Identidad unificada: ${record.previousUsernames.map((name) => `@${name}`).join(" → ")}.`
       : "";
+    if (previousCanonical && previousCanonical !== canonical) {
+      document.querySelector("#person-meta-status").textContent = "";
+    }
   }
 
   async function savePersonMeta() {
     const editor = document.querySelector("#person-meta-editor");
     const canonical = editor && Trust.normalizeUsername(editor.dataset.canonical);
     if (!canonical || !state.profile) return;
+    const status = document.querySelector("#person-meta-status");
+    status.textContent = "Guardando…";
     const tags = document.querySelector("#person-meta-tags").value
       .split(",")
       .map((tag) => tag.trim().toLowerCase())
@@ -255,8 +262,13 @@
     const key = Trust.storageKeys(state.profile).peopleMeta;
     await storageSet({ [key]: peopleMeta });
     if (state.storage) state.storage[key] = peopleMeta;
-    editor.dataset.signature = "";
-    document.querySelector("#person-meta-status").textContent = "Nota guardada localmente.";
+    editor.dataset.signature = JSON.stringify({
+      canonical,
+      pinned: peopleMeta.people[canonical].pinned,
+      tags: peopleMeta.people[canonical].tags,
+      note: peopleMeta.people[canonical].note,
+    });
+    status.textContent = "Nota guardada localmente.";
     document.querySelectorAll(".clickable-table-row[data-user]").forEach((row) => { row.dataset.trustSignature = ""; });
     decorateVisiblePeople();
     if (state.filter === "watchlist") renderPeople();
