@@ -36,18 +36,15 @@
   }
 
   function parseCount(text) {
-    const normalized = String(text || "")
-      .toLowerCase()
-      .replace(/\s/g, "")
-      .replace(/\./g, "")
-      .replace(/,/g, "");
-    const short = normalized.match(/([0-9]+(?:\.[0-9]+)?)([km])/i);
-    if (short) {
-      const number = Number(short[1]);
-      return Math.round(number * (short[2].toLowerCase() === "m" ? 1000000 : 1000));
+    const raw = String(text || "").toLowerCase().trim().replace(/\s+/g, "");
+    const abbreviated = raw.match(/([0-9]+(?:[.,][0-9]+)?)([km])/i);
+    if (abbreviated) {
+      const number = Number(abbreviated[1].replace(",", "."));
+      if (!Number.isFinite(number)) return null;
+      return Math.round(number * (abbreviated[2].toLowerCase() === "m" ? 1000000 : 1000));
     }
-    const match = normalized.match(/\d+/);
-    return match ? Number(match[0]) : null;
+    const digits = raw.replace(/[.,]/g, "").match(/\d+/);
+    return digits ? Number(digits[0]) : null;
   }
 
   function triggerFor(profile, phase) {
