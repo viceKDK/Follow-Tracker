@@ -79,45 +79,49 @@
 
     async function reviewAndCommit(stage) {
       pendingStage = stage;
-      let decision = stage.settings && stage.settings.autoAcceptTrusted && stage.review.status === "trusted"
-        ? "save"
-        : await overlay.requestReview(stage);
-      if (abortController && abortController.signal.aborted) decision = "discard";
-      if (decision === "discard") {
-        await CaptureStore.discardStage(stage);
-        overlay.complete("Captura descartada. El historial anterior no cambió.", "warning");
-        sendBadge("CXL", "#b7791f");
-        return { ok: true, discarded: true };
-      }
-      overlay.setStatus("Guardando el reporte localmente…");
-      const committed = await CaptureStore.commitStage(stage, decision);
-      overlay.complete(
-        decision === "save_suspicious"
-          ? "Reporte guardado como sospechoso para que puedas revisarlo en el dashboard."
-          : "Reporte guardado. Ya podés compararlo con capturas anteriores."
-      );
-      sendBadge("OK", "#15966d");
       try {
-        chrome.runtime.sendMessage({
-          source: "content",
-          type: "capture-saved",
-          profile: stage.profile,
-          reportId: stage.runId,
-          captureMeta: committed.captureMeta,
-        });
-      } catch (_error) {}
-      return { ok: true, committed };
+        let decision = stage.settings && stage.settings.autoAcceptTrusted && stage.review.status === "trusted"
+          ? "save"
+          : await overlay.requestReview(stage);
+        if (abortController && abortController.signal.aborted) decision = "discard";
+        if (decision === "discard") {
+          await CaptureStore.discardStage(stage);
+          overlay.complete("Captura descartada. El historial anterior no cambió.", "warning");
+          sendBadge("CXL", "#b7791f");
+          return { ok: true, discarded: true };
+        }
+        overlay.setStatus("Guardando el reporte localmente…");
+        const committed = await CaptureStore.commitStage(stage, decision);
+        overlay.complete(
+          decision === "save_suspicious"
+            ? "Reporte guardado como sospechoso para que puedas revisarlo en el dashboard."
+            : "Reporte guardado. Ya podés compararlo con capturas anteriores."
+        );
+        sendBadge("OK", "#15966d");
+        try {
+          chrome.runtime.sendMessage({
+            source: "content",
+            type: "capture-saved",
+            profile: stage.profile,
+            reportId: stage.runId,
+            captureMeta: committed.captureMeta,
+          });
+        } catch (_error) {}
+        return { ok: true, committed };
+      } finally {
+        pendingStage = null;
+      }
     }
 
     async function start(profileValue) {
       if (running) throw new Error("Ya hay un análisis en curso.");
+      if (pendingStage) throw new Error("Primero guardá o descartá la captura pendiente.");
       profile = Core.safeProfile(profileValue || currentProfile());
       if (!profile || profile === "perfil" || currentProfile() !== profile) {
         throw new Error("Abrí el perfil de Instagram que querés analizar.");
       }
       running = true;
       abortController = new AbortController();
-      pendingStage = null;
       overlay.show(profile);
       overlay.resetCounts();
       overlay.setBusy(true);
@@ -156,6 +160,7 @@
     }
 
     async function resumePending(profileValue) {
+      if (running || pendingStage) return { ok: false, pending: Boolean(pendingStage) };
       const targetProfile = Core.safeProfile(profileValue || currentProfile());
       const stage = await CaptureStore.loadPending(targetProfile);
       if (!stage) return { ok: false, pending: false };
@@ -167,7 +172,6 @@
         return await reviewAndCommit(stage);
       } finally {
         abortController = null;
-        pendingStage = null;
       }
     }
 
