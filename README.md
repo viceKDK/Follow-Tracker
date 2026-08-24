@@ -2,347 +2,488 @@
 
 # Follow Tracker
 
-### Compará seguidores y seguidos entre dos fechas, persona por persona
+### Seguidores antes y ahora, con revisión de calidad e identidad estable
 
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Manifest%20V3-2f6df6?style=for-the-badge&logo=googlechrome&logoColor=white)](#instalación)
+[![Version](https://img.shields.io/badge/version-3.0.0-6658d3?style=for-the-badge)](CHANGELOG.md)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-15966d?style=for-the-badge&logo=nodedotjs&logoColor=white)](#desarrollo)
 [![License](https://img.shields.io/badge/License-MIT-17213b?style=for-the-badge)](LICENSE)
 
-Extensión de navegador privada y local para guardar reportes de Instagram y ver cómo estaba cada relación antes y cómo está ahora.
+Extensión privada y local para guardar capturas de seguidores y seguidos, revisar su confiabilidad y comparar cada relación entre dos fechas.
 
 </div>
 
 > [!IMPORTANT]
-> El valor principal de Follow Tracker no es contar seguidores. Es comparar dos capturas completas y explicar, para cada persona, si te seguía, si la seguías, qué relación existe ahora y qué cambió entre ambas fechas.
+> Follow Tracker 3 no modifica el historial apenas termina de recolectar. Primero muestra la cobertura, la fuente, las advertencias y los cambios detectados. El usuario decide guardar, guardar como sospechoso o descartar.
 
 > [!NOTE]
-> Follow Tracker no está afiliado con Instagram ni Meta. Funciona sobre la sesión abierta en el navegador y puede necesitar mantenimiento cuando Instagram modifica su interfaz o sus endpoints internos.
+> Follow Tracker no está afiliado, patrocinado ni aprobado por Instagram o Meta. Instagram puede cambiar su interfaz o sus endpoints internos; por eso también existe la importación de archivos oficiales.
 
-## Qué resuelve
+## Qué problema resuelve
 
-Instagram muestra el estado actual, pero no conserva para vos una respuesta clara a preguntas como:
+Instagram muestra el estado actual, pero no responde claramente:
 
-- ¿Quién me seguía antes y ahora me dejó de seguir?
-- ¿A quién sigo yo pero no me sigue?
-- ¿Quién empezó a seguirme desde el último reporte?
-- ¿Con quién antes nos seguíamos y ahora ya no?
-- ¿Cuándo apareció un cambio en mis análisis?
-- ¿Qué cambió entre dos reportes no consecutivos?
+- ¿Quién me seguía antes y ahora no?
+- ¿A quién sigo y no me sigue?
+- ¿Quién empezó a seguirme desde una fecha concreta?
+- ¿Con quién antes nos seguíamos mutuamente?
+- ¿Una persona dejó de seguirme o solamente cambió su username?
+- ¿La lista que entregó Instagram estaba realmente completa?
+- ¿Qué cambios quedaron pendientes por falta de evidencia suficiente?
 
 Follow Tracker crea una línea temporal local por perfil y reconstruye el estado de cada persona en cualquier reporte guardado.
 
-## Frontend
+## Flujo principal
+
+```text
+Abrir un perfil de Instagram
+        ↓
+Recolectar por API
+        ↓ si falla
+Recorrer visualmente las listas
+        ↓
+Resolver identidades y usernames
+        ↓
+Calcular cobertura y anomalías
+        ↓
+Mostrar revisión
+        ↓
+Guardar / guardar como sospechoso / descartar
+        ↓
+Comparar antes y ahora
+```
+
+Hasta que se pulsa **Guardar reporte**, la captura queda en una clave temporal y el historial válido no cambia.
+
+## Revisión antes de guardar
+
+La pantalla de revisión muestra:
+
+- fuente: `api`, `ui` o `instagram_export`;
+- seguidores recolectados y contador esperado;
+- seguidos recolectados y contador esperado;
+- porcentaje de cobertura;
+- duración y reintentos;
+- cambios detectados;
+- caídas inusualmente grandes;
+- usernames renombrados;
+- bajas pendientes de confirmación;
+- puntaje de calidad.
+
+Estados posibles:
+
+| Estado | Significado |
+|---|---|
+| **Confiable** | La cobertura y los cambios están dentro de los límites configurados |
+| **Revisar** | Existe una advertencia, una caída grande o una baja pendiente |
+| **Rechazada** | La captura está demasiado incompleta para guardarse normalmente |
+| **Sospechosa** | El usuario decidió conservar una captura dudosa para investigarla |
+| **Heredada** | El reporte se creó antes de Follow Tracker 3 y no tiene evidencia de calidad |
+
+Una captura rechazada no puede guardarse como normal; solamente puede descartarse o conservarse explícitamente como sospechosa.
+
+## Confirmación de bajas
+
+Por defecto, una cuenta debe faltar en **dos capturas completas consecutivas** antes de convertirse en una baja confirmada.
+
+```text
+Reporte 1: @persona aparece
+Reporte 2: @persona falta → baja pendiente 1/2
+Reporte 3: @persona sigue faltando → baja confirmada
+```
+
+Si vuelve a aparecer antes de la segunda captura, la ausencia pendiente se elimina y no se genera un falso unfollow.
+
+La cantidad necesaria puede modificarse en:
+
+```text
+Administrar → Reglas de captura
+```
+
+## Identidad estable y cambios de username
+
+Cuando la respuesta de Instagram incluye el ID numérico de una cuenta, Follow Tracker lo utiliza como identidad estable.
+
+Ejemplo:
+
+```text
+ID 123456
+Antes: @nombre_viejo
+Ahora: @nombre_nuevo
+```
+
+El historial conserva una sola persona:
+
+```text
+Identidad canónica: @nombre_viejo
+Username actual:    @nombre_nuevo
+Alias guardados:    nombre_viejo, nombre_nuevo
+```
+
+No se inventa una baja de `@nombre_viejo` y un alta de `@nombre_nuevo`.
+
+Si el cambio no pudo detectarse automáticamente, se puede corregir desde:
+
+```text
+Administrar → Identidades → Unir identidad
+```
+
+## Dashboard
 
 <p align="center">
-  <img src="docs/dashboard-showcase.webp" alt="Pestaña Antes y ahora de Follow Tracker, con la relación anterior y actual de cada persona" width="760">
+  <img src="docs/dashboard-showcase.webp" alt="Pestaña Antes y ahora de Follow Tracker" width="760">
 </p>
 
-> Todas las cuentas, fechas y cifras de las capturas del repositorio son ficticias.
+> Las cuentas, fechas y cifras de las imágenes del repositorio son ficticias.
 
-El dashboard se divide en cuatro pestañas:
+El dashboard tiene cinco secciones.
 
-| Pestaña | Qué muestra |
-|---|---|
-| **Resumen** | Totales actuales, cambios del último reporte, evolución y salud del historial |
-| **Antes y ahora** | Comparación detallada entre dos reportes, con una fila por persona |
-| **Personas** | Estado actual e historial individual de cada usuario |
-| **Actividad** | Todos los cambios detectados, con búsqueda, filtros y paginación |
+### Resumen
 
-## Antes y ahora
+Muestra:
 
-Esta es la pantalla principal del producto.
+- seguidores y seguidos actuales;
+- relaciones mutuas;
+- personas que solamente te siguen;
+- personas que solamente seguís;
+- bajas confirmadas del último reporte;
+- evolución por fecha;
+- calidad de la última captura;
+- salud estructural del historial;
+- recordatorio de backup;
+- recuperación del último reporte.
 
-Seleccionás:
+### Antes y ahora
 
-1. un **reporte anterior**;
-2. un **reporte actual**.
-
-La aplicación reconstruye ambas capturas y compara las listas completas. Para cada persona muestra:
+Elegís un reporte anterior y uno actual. Para cada persona se muestra:
 
 - si te seguía antes;
 - si vos la seguías antes;
 - si te sigue ahora;
 - si vos la seguís ahora;
-- el estado anterior;
-- el estado actual;
-- una frase clara que explica qué pasó.
-
-### Estados actuales
-
-| Estado | Significado |
-|---|---|
-| **Se siguen** | Vos lo seguís y esa persona también te sigue |
-| **Te sigue; no lo seguís** | Esa persona te sigue, pero vos no la seguís |
-| **Lo seguís; no te sigue** | Vos seguís a esa persona, pero ella no te sigue |
-| **No se siguen** | Ninguno sigue al otro en el reporte elegido |
-
-### Cambios entre reportes
-
-| Mensaje | Qué significa |
-|---|---|
-| **Te sigue ahora** | En el reporte anterior no te seguía y en el actual sí |
-| **Te dejó de seguir** | En el reporte anterior te seguía y en el actual no |
-| **Te dejó de seguir; vos todavía lo seguís** | Antes se seguían y ahora solamente vos lo seguís |
-| **Lo seguís ahora** | Antes no lo seguías y ahora sí |
-| **Lo dejaste de seguir** | Antes lo seguías y ahora no |
-| **Lo dejaste de seguir; todavía te sigue** | Antes se seguían y ahora solamente esa persona te sigue |
-| **Se siguen ahora** | Antes no se seguían en ambos sentidos y ahora sí |
-| **Se dejaron de seguir** | Antes se seguían y ahora ninguno sigue al otro |
-
-### Herramientas de comparación
-
-- búsqueda por usuario;
-- filtros rápidos por cambio;
-- filtro por estado actual;
-- filtro por tipo exacto de cambio;
-- orden por usuario, estado o prioridad;
-- presets **último vs anterior**, **hace 7 días vs ahora** y **primer reporte vs ahora**;
-- tabla compacta o normal;
-- panel lateral con el historial individual;
-- exportación CSV de la vista filtrada;
-- paginación de 100, 250 o 500 filas para mantener el dashboard fluido con listas grandes.
-
-## Resumen
-
-El resumen usa la última captura completa y muestra:
-
-- **Te siguen**: total de seguidores actuales.
-- **Seguís**: total de cuentas seguidas actualmente.
-- **Se siguen**: relaciones mutuas.
-- **Te siguen; no los seguís**: seguidores que no seguís.
-- **Los seguís; no te siguen**: cuentas que seguís y no te siguen.
-- **Te dejaron de seguir**: bajas detectadas desde el reporte anterior.
-- evolución de seguidores y seguidos por reporte;
-- grupos de cambios del último análisis.
-
-### Salud del historial
-
-La versión 2.1 agrega un diagnóstico local que revisa:
-
-- que la captura y la línea temporal pertenezcan al mismo perfil;
-- que exista la línea base necesaria para reconstruir reportes;
-- IDs duplicados de reportes o eventos;
-- usuarios duplicados;
-- fechas o tipos de evento inválidos;
-- diferencias entre los totales de la captura actual y el último reporte.
-
-El panel entrega un puntaje de consistencia y permite descargar un diagnóstico JSON. No sube información a ningún servidor.
-
-## Personas
-
-La pestaña **Personas** permite buscar una cuenta y ver:
-
+- estado anterior;
 - estado actual;
-- si te sigue;
-- si la seguís;
-- cantidad de cambios guardados;
-- último cambio detectado;
-- fecha y reporte que detectaron el cambio;
-- historial individual completo;
-- enlace directo al perfil de Instagram.
+- explicación exacta del cambio.
 
-Filtros disponibles:
+Herramientas:
 
-- Todos.
-- Te dejó de seguir.
-- Te sigue; no lo seguís.
-- Lo seguís; no te sigue.
-- Se siguen.
-- Ya no se siguen.
+- búsqueda por username;
+- filtro por estado actual;
+- filtro por tipo de cambio;
+- presets último/anterior, hace siete días/ahora y primero/ahora;
+- orden por columnas;
+- densidad compacta o normal;
+- paginación de 100, 250 o 500 filas;
+- panel lateral con historial individual;
+- exportación CSV de la vista filtrada.
 
-La tabla se pagina para evitar congelamientos con decenas de miles de cuentas.
+### Personas
 
-## Actividad
+Permite consultar:
 
-La pestaña **Actividad** ordena los eventos desde el más reciente y permite filtrar por:
+- relación actual;
+- historial de eventos;
+- username actual y alias anteriores;
+- enlace al perfil;
+- notas privadas;
+- etiquetas;
+- estado fijado.
 
-- usuario;
-- tipo de cambio;
-- reporte;
-- fecha desde;
-- fecha hasta.
+Filtros:
+
+- todos;
+- te dejó de seguir;
+- te sigue y no lo seguís;
+- lo seguís y no te sigue;
+- se siguen;
+- ya no se siguen;
+- fijados.
+
+### Actividad
+
+Incluye:
+
+- búsqueda por persona o reporte;
+- filtro por tipo de evento;
+- filtro por reporte;
+- rango de fechas;
+- paginación de 50, 100, 250 o 500 eventos;
+- exportación CSV de las coincidencias.
+
+La fecha es la fecha del reporte que detectó el cambio, no necesariamente el segundo exacto en que ocurrió.
+
+### Administrar
+
+Centraliza el mantenimiento del espacio de trabajo:
+
+- importar JSON oficiales de Instagram;
+- etiquetar y archivar perfiles;
+- exportar un perfil o todos;
+- fusionar perfiles duplicados;
+- editar etiqueta, nota y estado de un reporte;
+- eliminar cualquier reporte intermedio;
+- unir identities/usernames;
+- configurar umbrales de calidad;
+- configurar cuántas capturas confirman una baja.
+
+## Importar la descarga oficial de Instagram
+
+Desde **Administrar → Importación oficial** se pueden seleccionar archivos como:
+
+```text
+followers_1.json
+followers_2.json
+following.json
+```
+
+Follow Tracker:
+
+1. clasifica los archivos;
+2. extrae los usernames;
+3. combina archivos divididos;
+4. muestra una vista previa;
+5. crea una captura con fuente `instagram_export`;
+6. aplica las mismas reglas de identidad, ausencia y calidad.
+
+Esto funciona como alternativa cuando la API interna o la interfaz de Instagram cambian.
+
+## Administrar perfiles
+
+Para cada perfil se muestra:
+
+- cantidad de reportes;
+- personas actuales;
+- espacio local estimado;
+- etiqueta local;
+- estado archivado.
+
+Acciones:
+
+```text
+Abrir
+Guardar etiqueta
+Archivar / desarchivar
+Exportar
+Eliminar
+```
+
+### Fusionar perfiles
+
+Sirve cuando el mismo perfil quedó guardado bajo dos usernames distintos.
+
+La fusión:
+
+- reconstruye snapshots de ambos timelines;
+- ordena las capturas por fecha;
+- elimina IDs duplicados;
+- recalcula los deltas;
+- combina identidades, notas y metadatos;
+- elimina el perfil de origen.
+
+## Administrar reportes
+
+Cada reporte puede tener:
+
+```text
+Etiqueta
+Nota breve
+Estado de confianza
+Fuente
+Puntaje
+```
+
+También se puede eliminar un reporte intermedio. Follow Tracker no corta el array sin más: reconstruye todos los snapshots restantes y recalcula correctamente los cambios posteriores.
+
+## Notas, etiquetas y fijados
+
+En el panel de una persona se puede guardar:
+
+- una nota privada;
+- hasta 12 etiquetas;
+- estado fijado.
 
 Ejemplo:
 
 ```text
-@beto te dejó de seguir
-24 ago. 2026, 15:30
-Reporte r4
+@persona
+Fijado: sí
+Etiquetas: amistad, trabajo
+Nota: "Nos seguimos desde marzo"
 ```
 
-La fecha indica cuándo un reporte detectó el cambio. La extensión no puede conocer el segundo exacto en el que ocurrió entre dos análisis.
+Todo permanece en el navegador y se incluye en el backup completo.
 
-La actividad se pagina en bloques de 50, 100, 250 o 500 filas. La vista filtrada puede exportarse a CSV.
+## Backups
 
-## Cómo funciona
+### Backup de un perfil
 
-```text
-Primer análisis  → crea la línea base
-Segundo análisis → compara contra la línea base
-Nuevos análisis  → amplían el historial
-Dos reportes      → permiten reconstruir el antes y el ahora
-```
+Incluye:
 
-Una captura incompleta no reemplaza el historial válido ni genera falsos unfollows.
+- snapshot actual;
+- línea temporal;
+- calidad de cada captura;
+- identidades y alias;
+- bajas pendientes;
+- notas, etiquetas y fijados;
+- metadatos del perfil;
+- recuperación temporal;
+- configuración.
 
-El análisis intenta primero obtener las listas mediante la API utilizada por la página. Cuando la cobertura no es suficiente, recurre al recorrido visual de las listas.
+### Backup de todos los perfiles
 
-## Guardado y exportaciones
+Desde **Administrar** se puede crear un único archivo de espacio de trabajo con todos los perfiles.
 
-Los análisis se guardan en `chrome.storage.local`.
+### Recordatorio
 
-**La extensión no descarga CSV ni Excel automáticamente después de analizar.** Esto evita llenar la carpeta Descargas cada vez que se crea una captura. Los archivos se generan únicamente cuando el usuario los solicita desde el dashboard.
+El Resumen muestra un aviso cuando:
 
-Exportaciones disponibles:
+- nunca se hizo un backup;
+- pasaron 30 días;
+- existen al menos cinco reportes nuevos desde la última exportación.
 
-- **Backup JSON**: captura actual y línea temporal completa.
-- **Actividad CSV**: persona, evento, fecha, reporte y `run_id`.
-- **Relaciones CSV**: estado actual de cada persona.
-- **Comparación CSV**: filas visibles según los filtros de Antes y ahora.
-- **Actividad filtrada CSV**: eventos que coinciden con los filtros actuales.
-- **Diagnóstico JSON**: métricas y observaciones de consistencia.
+Los umbrales se guardan localmente.
 
-### Importar backup
+## Recuperación
 
-El botón **Importar backup** permite restaurar el JSON exportado por Follow Tracker.
+### Deshacer el último reporte
 
-Antes de guardar, la extensión valida:
+La sección Recuperación permite volver exactamente al reporte anterior. Antes guarda un punto de recuperación de un solo uso.
 
-- formato del archivo;
-- listas de seguidores y seguidos;
-- perfil de la captura;
-- estructura de reportes y eventos;
-- presencia de la línea base;
-- coincidencia entre el perfil de la captura y el de la línea temporal.
+### Restaurar
 
-También admite una captura heredada que solamente contenga `profile`, `followers` y `following`; en ese caso crea una nueva línea base.
+Se puede restaurar el reporte deshecho mientras no se haya agregado otro reporte incompatible.
+
+### Eliminar un reporte intermedio
+
+Se realiza desde Administrar y reconstruye toda la línea temporal. Es una operación distinta al rollback rápido del último reporte.
+
+## Exportaciones
+
+Follow Tracker no genera CSV ni XLS automáticamente durante el análisis.
+
+Las exportaciones se producen únicamente por una acción explícita:
+
+- backup JSON completo;
+- backup de todos los perfiles;
+- actividad CSV;
+- relaciones CSV;
+- comparación CSV;
+- actividad filtrada CSV;
+- diagnóstico JSON.
+
+Los CSV neutralizan valores que empiezan con `=`, `+`, `-` o `@` para evitar fórmulas al abrirlos en una planilla.
 
 ## Privacidad
 
-- No existe un backend propio.
-- No se crea una cuenta de Follow Tracker.
-- Los datos permanecen en el navegador mediante `chrome.storage.local`.
-- La extensión no realiza follows, unfollows, mensajes ni acciones masivas.
-- La extensión no solicita contraseñas.
-- Borrar el historial de un perfil elimina sus reportes locales.
-- Borrar la extensión elimina su almacenamiento local salvo que antes se haya exportado un backup.
-- Los archivos exportados quedan bajo control del usuario y deben eliminarse manualmente cuando ya no se necesiten.
+- Sin backend propio.
+- Sin cuenta de Follow Tracker.
+- Sin analytics de seguidores.
+- Sin almacenamiento de contraseña.
+- Sin follow/unfollow automático.
+- Sin mensajes ni publicaciones.
+- Datos guardados en `chrome.storage.local`.
+- Archivos generados solamente cuando el usuario lo solicita.
 
-## Modelo de datos
+Consulta [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md).
 
-```text
-ft_history_<perfil>   → última captura completa
-ft_timeline_<perfil>  → línea base, reportes y eventos
-```
-
-Cada reporte conserva:
+## Modelo de almacenamiento
 
 ```text
-id / runId
-capturedAt
-followersCount
-followingCount
-mutualCount
-newFollowers
-lostFollowers
-newFollowing
-lostFollowing
+ft_history_<perfil>         última captura aceptada
+ft_timeline_<perfil>        línea base, reportes y eventos
+ft_capture_meta_<perfil>    fuente, cobertura, puntaje y notas de reportes
+ft_identity_<perfil>        IDs estables, username actual y alias
+ft_absence_<perfil>         desapariciones pendientes de confirmación
+ft_people_meta_<perfil>     fijados, notas y etiquetas
+ft_profile_meta_<perfil>    etiqueta, archivo y datos del perfil
+ft_backup_status_<perfil>   última exportación conocida
+ft_pending_capture_<perfil> captura esperando decisión
+ft_recovery_<perfil>        rollback temporal del último reporte
+ft_settings                 reglas de captura
 ```
 
-Cada evento conserva:
+Los historiales 2.x continúan usando `ft_history_*` y `ft_timeline_*`; la información 3.0 se agrega mediante sidecars compatibles.
+
+## Arquitectura
+
+El antiguo content script monolítico fue reemplazado por módulos separados:
 
 ```text
-username
-type
-occurredAt
-reportId
-runId
+trust-core.js            reglas puras de calidad, identidad e importación
+capture-store.js         staging, commit y descarte de capturas
+instagram-api.js         sesión, API, paginación y reintentos
+instagram-ui.js          fallback visual
+analysis-overlay.js      interfaz sobre Instagram
+analysis-controller.js   orquestación
+content-entry.js         mensajes de la extensión
 ```
 
-La línea temporal guarda una captura base y los cambios posteriores. De esa forma puede reconstruir reportes históricos sin duplicar miles de nombres en cada ejecución.
+El dashboard se amplía con:
 
-## Instalación
+```text
+dashboard-backup.js
+dashboard-identity.js
+dashboard-admin.js
+dashboard-trust.css
+```
 
-### 1. Descargar el proyecto
+La migración detallada está en [`docs/MIGRATION-3.0.md`](docs/MIGRATION-3.0.md).
 
-Desde GitHub:
-
-1. Abrí **Code**.
-2. Seleccioná **Download ZIP**.
-3. Descomprimí el repositorio.
-
-También podés clonarlo:
+## Instalación manual
 
 ```bash
 git clone https://github.com/viceKDK/Follow-Tracker.git
 cd Follow-Tracker
 ```
 
-### 2. Cargar la extensión
-
 1. Abrí `chrome://extensions` o `edge://extensions`.
 2. Activá **Modo desarrollador**.
 3. Pulsá **Cargar descomprimida**.
-4. Seleccioná la carpeta `extension/`.
-5. Fijá Follow Tracker en la barra del navegador.
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/01-extensions.png" alt="Página de extensiones"></td>
-    <td width="50%"><img src="docs/02-dev-mode.png" alt="Modo desarrollador"></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/03-load-unpacked.png" alt="Cargar extensión descomprimida"></td>
-    <td width="50%"><img src="docs/04-pin-icon.png" alt="Fijar icono de Follow Tracker"></td>
-  </tr>
-</table>
+4. Seleccioná `extension/`.
+5. Fijá el icono de Follow Tracker.
 
 ## Uso
 
-1. Iniciá sesión en Instagram en el mismo navegador.
-2. Abrí un perfil con formato `instagram.com/usuario/`.
-3. Pulsá el icono de Follow Tracker.
-4. Seleccioná **Analizar perfil actual**.
-5. Mantené la pestaña abierta durante el recorrido.
-6. Al finalizar se guarda la captura localmente y se abre el dashboard.
-7. Desde **Antes y ahora**, elegí dos reportes para comparar las relaciones.
-8. Exportá un backup JSON cuando quieras conservar o trasladar el historial.
-
-<table>
-  <tr>
-    <td width="33%"><img src="docs/07-profile-open.png" alt="Perfil de Instagram abierto"></td>
-    <td width="33%"><img src="docs/08-analysis-running.png" alt="Análisis en curso"></td>
-    <td width="33%"><img src="docs/09-analysis-finished.png" alt="Análisis finalizado"></td>
-  </tr>
-</table>
-
-Atajo del dashboard: pulsá `/` fuera de un campo para enfocar la búsqueda de la sección activa.
+1. Iniciá sesión en Instagram.
+2. Abrí `instagram.com/usuario/`.
+3. Pulsá Follow Tracker.
+4. Elegí **Analizar perfil actual**.
+5. Dejá la pestaña abierta mientras carga.
+6. Revisá la cobertura y los cambios.
+7. Guardá o descartá.
+8. Abrí **Antes y ahora** para comparar.
+9. Descargá un backup cuando quieras conservar el espacio de trabajo.
 
 ## Limitaciones
 
 Instagram puede:
 
-- imponer pausas;
-- responder con errores `429` o `503`;
-- ocultar cuentas suspendidas;
-- mostrar contadores distintos a las filas que entrega;
-- modificar su interfaz o endpoints internos.
+- responder con `429`, `502`, `503` o `504`;
+- ocultar cuentas suspendidas o no disponibles;
+- entregar contadores y listas temporalmente desalineados;
+- cambiar endpoints;
+- cambiar su DOM;
+- limitar cuentas privadas.
 
-Por eso:
+Follow Tracker reduce el riesgo mediante:
 
-- no se promete una duración fija;
-- no se debe cerrar la pestaña durante el análisis;
-- solamente una captura suficientemente completa actualiza el historial;
-- una cuenta privada requiere que la sesión activa tenga acceso a sus listas;
-- el recorrido visual es más lento que el modo API;
-- la fecha de un evento es la fecha del reporte que lo detectó, no necesariamente la fecha exacta del follow o unfollow.
+- reintentos y backoff;
+- fallback visual;
+- revisión previa;
+- umbrales de cobertura;
+- confirmación en más de una captura;
+- IDs estables;
+- importación oficial;
+- rollback y backups.
+
+No puede garantizar el instante exacto de un follow/unfollow ni que Instagram mantenga indefinidamente sus interfaces internas.
 
 ## Desarrollo
 
 Requisitos:
 
 - Node.js 20 o superior;
-- Chromium para las pruebas E2E.
+- Chromium para Playwright.
 
 ```bash
 npm ci
@@ -351,50 +492,27 @@ npm test
 npm run check
 npm run e2e:fixture
 npm run e2e
+npm run package
 ```
 
-La CI ejecuta pruebas unitarias, validación sintáctica, fixture smoke y Playwright.
-
-### Estructura
+`npm run package` genera:
 
 ```text
-extension/
-  manifest.json
-  background.js
-  content.js
-  core.js
-  history.js
-  product-core.js
-  export-policy.js
-  popup.html
-  popup.css
-  popup.js
-  dashboard.html
-  dashboard.css
-  dashboard-table.css
-  dashboard-ux.css
-  dashboard-product.css
-  dashboard.js
-  dashboard-table.js
-  dashboard-ux.js
-  dashboard-product.js
-
-docs/
-  capturas, documentación y checklist final de QA
-
-tests/
-  pruebas unitarias y E2E
+dist/follow-tracker-3.0.0.zip
+dist/follow-tracker-3.0.0.zip.sha256
+dist/release-manifest.json
 ```
 
-## Estado del producto
+Los tags `v*` ejecutan el workflow de release y publican esos archivos en GitHub Releases.
 
-La versión 2.1 cierra el flujo principal:
+## Documentación de distribución
 
-```text
-analizar → guardar → comparar → investigar una persona → filtrar actividad → exportar → restaurar backup
-```
-
-El trabajo futuro debe priorizar compatibilidad cuando Instagram cambie, correcciones y validación real; no agregar complejidad que desvíe el producto de la comparación privada de seguidores.
+- [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md)
+- [`STORE_LISTING.md`](STORE_LISTING.md)
+- [`CHANGELOG.md`](CHANGELOG.md)
+- [`docs/MIGRATION-3.0.md`](docs/MIGRATION-3.0.md)
+- [`docs/FINAL-QA.md`](docs/FINAL-QA.md)
+- [`docs/RECOVERY.md`](docs/RECOVERY.md)
 
 ## Licencia
 
