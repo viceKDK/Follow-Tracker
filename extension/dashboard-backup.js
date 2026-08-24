@@ -20,10 +20,10 @@
   }
 
   function toast(message, tone = "success") {
-    let target = document.querySelector("#trust-backup-toast");
+    let target = document.querySelector("#product-toast");
     if (!target) {
       target = document.createElement("div");
-      target.id = "trust-backup-toast";
+      target.id = "product-toast";
       target.className = "product-toast";
       target.setAttribute("role", "status");
       document.body.append(target);
@@ -198,7 +198,7 @@
     if (file.size > 100 * 1024 * 1024) throw new Error("El archivo supera 100 MB.");
     let payload;
     try { payload = JSON.parse(await file.text()); }
-    catch (_error) { throw new Error("El archivo no contiene JSON válido."); }
+    catch (_error) { throw new Error("No se pudo leer el JSON del backup."); }
     const profiles = await importBackupPayload(payload);
     if (!profiles.length) return;
     toast(`${profiles.length} perfil(es) restaurados.`);
