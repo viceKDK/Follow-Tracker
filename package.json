@@ -4,12 +4,13 @@
   "private": true,
   "description": "Extensión Manifest V3 para guardar capturas locales de Instagram, comparar relaciones entre fechas y auditar el historial sin backend.",
   "scripts": {
-    "test": "node --test extension/core.test.js extension/history.test.js extension/export-policy.test.js extension/product-core.test.js extension/background.test.js",
+    "test": "node --test extension/core.test.js extension/history.test.js extension/maintenance.test.js extension/export-policy.test.js extension/product-core.test.js extension/background.test.js",
     "validate:extension": "node scripts/validate-extension.js",
-    "check": "node --check extension/core.js && node --check extension/history.js && node --check extension/export-policy.js && node --check extension/product-core.js && node --check extension/content.js && node --check extension/background.js && node --check extension/popup.js && node --check extension/dashboard.js && node --check extension/dashboard-table.js && node --check extension/dashboard-ux.js && node --check extension/dashboard-product.js && node --check tests/e2e/dashboard.spec.js && node scripts/validate-extension.js",
+    "check": "node --check extension/core.js && node --check extension/history.js && node --check extension/maintenance.js && node --check extension/export-policy.js && node --check extension/product-core.js && node --check extension/content.js && node --check extension/background.js && node --check extension/popup.js && node --check extension/dashboard.js && node --check extension/dashboard-table.js && node --check extension/dashboard-ux.js && node --check extension/dashboard-product.js && node --check extension/dashboard-maintenance.js && node --check tests/e2e/dashboard.spec.js && node --check tests/e2e/recovery.spec.js && node scripts/validate-extension.js",
     "e2e:fixture": "node tests/e2e/smoke-fixture.js",
     "e2e:instagram": "playwright test tests/e2e/extension.spec.js",
     "e2e:dashboard": "playwright test tests/e2e/dashboard.spec.js",
+    "e2e:recovery": "playwright test tests/e2e/recovery.spec.js",
     "e2e": "playwright test"
   },
   "devDependencies": {
