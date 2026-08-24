@@ -2,6 +2,8 @@
 
 (function loadDashboardEnhancements() {
   const files = [
+    "history-guard.js",
+    "history-quality.js",
     "trust-core.js",
     "capture-store.js",
     "product-core.js",
@@ -12,6 +14,7 @@
     "dashboard-backup.js",
     "dashboard-identity.js",
     "dashboard-admin.js",
+    "dashboard-integrity.js",
   ];
 
   function loadAt(index) {

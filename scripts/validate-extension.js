@@ -120,6 +120,8 @@ for (const htmlPath of walk(extensionDir).filter((file) => file.endsWith(".html"
 const runtimeReferences = [
   "core.js",
   "history.js",
+  "history-guard.js",
+  "history-quality.js",
   "maintenance.js",
   "product-core.js",
   "trust-core.js",
@@ -137,6 +139,7 @@ const runtimeReferences = [
   "dashboard-backup.js",
   "dashboard-identity.js",
   "dashboard-admin.js",
+  "dashboard-integrity.js",
   "dashboard.css",
   "dashboard-table.css",
   "dashboard-ux.css",
