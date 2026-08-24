@@ -65,7 +65,7 @@
         <div class="section-hero"><div><p class="eyebrow">DATOS LOCALES</p><h1>Administrar</h1><p>Importá datos oficiales, organizá perfiles, corregí reportes y configurá cómo se confirman las bajas.</p></div></div>
         <div class="admin-layout">
           <article class="panel admin-section">
-            <div class="admin-heading"><div><p class="panel-kicker">IMPORTACIÓN OFICIAL</p><h2>Crear un reporte desde los archivos de Instagram</h2><p>Seleccioná `followers_1.json` y `following.json` de la descarga oficial.</p></div></div>
+            <div class="admin-heading"><div><p class="panel-kicker">IMPORTACIÓN OFICIAL</p><h2>Crear un reporte desde los archivos de Instagram</h2><p>Seleccioná <code>followers_1.json</code> y <code>following.json</code> de la descarga oficial.</p></div></div>
             <div class="admin-grid">
               <label class="admin-field"><span>Perfil</span><input id="official-import-profile" type="text" placeholder="usuario"></label>
               <label class="admin-field"><span>Fecha de la captura</span><input id="official-import-date" type="date"></label>
