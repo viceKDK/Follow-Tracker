@@ -25,12 +25,24 @@
           <span id="profile-state" class="state-pill">Revisando</span>
         </div>
 
-        <p id="profile-help" class="profile-help">Abre un perfil de Instagram para analizarlo.</p>
+        <p id="profile-help" class="profile-help">Abrí un perfil de Instagram para analizarlo.</p>
 
         <div id="mini-stats" class="mini-stats" hidden>
           <div><strong id="followers-count">0</strong><span>Te siguen</span></div>
           <div><strong id="following-count">0</strong><span>Seguís</span></div>
           <div><strong id="reports-count">0</strong><span>Reportes</span></div>
+        </div>
+
+        <div id="quality-summary" class="quality-summary" hidden>
+          <div>
+            <span class="label">Última captura</span>
+            <strong id="quality-label">Sin evidencia</strong>
+          </div>
+          <span id="quality-score" class="quality-score">—</span>
+        </div>
+
+        <div id="pending-summary" class="pending-summary" hidden>
+          Hay una captura esperando que la guardes o descartes en Instagram.
         </div>
       </section>
 
@@ -38,7 +50,7 @@
         <span class="button-icon" aria-hidden="true">↻</span>
         <span>
           <strong>Analizar perfil actual</strong>
-          <small>Guarda una captura nueva para detectar cambios</small>
+          <small>Recolecta los datos y te deja revisarlos antes de guardar</small>
         </span>
       </button>
 
@@ -46,7 +58,16 @@
         <span class="button-icon" aria-hidden="true">⇆</span>
         <span>
           <strong>Ver antes y ahora</strong>
-          <small>Compara reportes y revisa cada relación</small>
+          <small>Compará reportes, personas, notas y actividad</small>
+        </span>
+        <span aria-hidden="true">→</span>
+      </button>
+
+      <button id="admin-button" class="button button-secondary button-compact" type="button">
+        <span class="button-icon" aria-hidden="true">⚙</span>
+        <span>
+          <strong>Administrar datos</strong>
+          <small>Importar archivos oficiales, backups y reportes</small>
         </span>
         <span aria-hidden="true">→</span>
       </button>
@@ -54,13 +75,14 @@
       <div id="message" class="message" hidden></div>
 
       <footer>
-        <span>Compará seguidores y seguidos por fecha.</span>
+        <span>Todo se guarda localmente.</span>
         <button id="open-instagram" class="text-button" type="button">Abrir Instagram</button>
       </footer>
     </main>
 
     <script src="core.js"></script>
     <script src="history.js"></script>
+    <script src="trust-core.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>
