@@ -12,7 +12,8 @@
 
   const DEFAULTS = Object.freeze({
     pageSize: 100,
-    maxPages: 600,
+    maxPages: 1200,
+    maxUsers: 100000,
     maxAttempts: 5,
     timeoutMs: 20000,
     interPageMs: 450,
@@ -151,7 +152,7 @@
   function apiUser(value) {
     if (!value || typeof value !== "object") return null;
     return Trust.normalizeUser({
-      instagramUserId: value.pk || value.pk_id || value.id,
+      instagramUserId: value.pk_id || value.pk || value.id,
       username: value.username,
       fullName: value.full_name,
     }, "api");
@@ -168,7 +169,7 @@
     let retries = 0;
     let emptyPages = 0;
 
-    while (pages < settings.maxPages) {
+    while (pages < settings.maxPages && users.length < settings.maxUsers) {
       if (settings.signal && settings.signal.aborted) throw new DOMException("Cancelado", "AbortError");
       const query = new URLSearchParams({
         count: String(settings.pageSize),
@@ -187,6 +188,7 @@
       const pageUsers = Array.isArray(json && json.users) ? json.users : [];
       let added = 0;
       pageUsers.forEach((value) => {
+        if (users.length >= settings.maxUsers) return;
         const user = apiUser(value);
         if (!user) return;
         const key = user.instagramUserId ? `id:${user.instagramUserId}` : `username:${user.username}`;
@@ -202,7 +204,6 @@
       const next = json && (json.next_max_id || json.next_min_id);
       const nextId = next == null || next === "" ? "" : String(next);
       if (!nextId || nextId === maxId || emptyPages >= 2) break;
-      if (Number.isFinite(expected) && expected >= 0 && users.length >= expected) break;
       maxId = nextId;
       await sleep(settings.interPageMs + Math.floor(Math.random() * 250), settings.signal);
     }
@@ -243,6 +244,7 @@
 
   return {
     DEFAULTS,
+    apiUser,
     collectPhase,
     collectProfile,
     cookie,
