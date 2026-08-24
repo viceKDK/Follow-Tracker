@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Follow Tracker - Historial local",
-  "description": "Descarga CSV de cada captura, conserva cambios por fecha y los muestra en un dashboard privado.",
-  "version": "2.0.0",
+  "name": "Follow Tracker - Antes y ahora",
+  "description": "Guarda capturas locales, compara seguidores y seguidos entre fechas y exporta únicamente cuando vos lo pedís.",
+  "version": "2.1.0",
   "permissions": [
     "activeTab",
     "storage",

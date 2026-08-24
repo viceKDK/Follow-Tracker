@@ -1,6 +1,6 @@
-# Capturas del producto
+# Capturas y documentación del producto
 
-Esta carpeta contiene imágenes para documentar la instalación, el análisis y el frontend de Follow Tracker.
+Esta carpeta contiene imágenes y controles de calidad para documentar la instalación, el análisis y el frontend de Follow Tracker.
 
 ## Frontend
 
@@ -22,5 +22,9 @@ La pestaña principal del producto es **Antes y ahora**. Allí se selecciona un 
 - `07-profile-open.png`: perfil abierto.
 - `08-analysis-running.png`: análisis en curso.
 - `09-analysis-finished.png`: análisis finalizado.
+
+## Calidad
+
+- `FINAL-QA.md`: checklist de instalación, análisis, comparaciones, volumen, backup, privacidad, accesibilidad y release.
 
 Todas las cuentas y cifras usadas para mostrar el frontend son ficticias.

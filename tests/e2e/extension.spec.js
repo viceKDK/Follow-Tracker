@@ -139,9 +139,9 @@ async function loadExtension(page) {
 
 for (const scenario of [
   { name: "perfil con relaciones", followers: 3, following: 2 },
-  { name: "cuenta completamente vacia", followers: 0, following: 0 },
+  { name: "cuenta completamente vacía", followers: 0, following: 0 },
 ]) {
-  test(`extension completa el flujo API para ${scenario.name}`, async ({ page }) => {
+  test(`extensión completa el flujo API y guarda localmente para ${scenario.name}`, async ({ page }) => {
     page.on("console", (message) => {
       if (message.type() === "warning" || message.type() === "error") {
         console.log(`[browser:${message.type()}] ${message.text()}`);
@@ -156,23 +156,27 @@ for (const scenario of [
     await page.locator("#ft-start").click();
     await expect(page.locator("#ft-status")).toContainText("Finalizado (modo API)", { timeout: 15000 });
 
-    const state = await page.evaluate(() => ({
+    const result = await page.evaluate(() => ({
       downloads: globalThis.__ftTest.downloads,
       messages: globalThis.__ftTest.messages,
       storage: globalThis.__ftTest.storage,
     }));
-    expect(state.downloads).toHaveLength(2);
-    expect(state.downloads.every((name) => name.endsWith(".csv"))).toBe(true);
-    expect(state.downloads.some((name) => name.includes("_followers_"))).toBe(true);
-    expect(state.downloads.some((name) => name.includes("_following_"))).toBe(true);
-    expect(state.messages.filter((message) => message.type === "legacy-report-suppressed")).toHaveLength(1);
-    expect(state.storage.ft_history_demo_profile.followers).toHaveLength(scenario.followers);
-    expect(state.storage.ft_history_demo_profile.following).toHaveLength(scenario.following);
+
+    // El análisis nunca debe llenar Descargas. Los CSV/JSON se generan solamente
+    // cuando el usuario los solicita desde el dashboard.
+    expect(result.downloads).toEqual([]);
+    const suppressed = result.messages.filter((message) => message.type === "legacy-report-suppressed");
+    expect(suppressed).toHaveLength(1);
+    expect(suppressed[0].filename).toMatch(/^ig_auto_.*\.(?:csv|xls)$/i);
+
+    expect(result.storage.ft_history_demo_profile.followers).toHaveLength(scenario.followers);
+    expect(result.storage.ft_history_demo_profile.following).toHaveLength(scenario.following);
+    expect(result.storage.ft_history_demo_profile.profile).toBe("demo_profile");
     expect(unexpected).toEqual([]);
   });
 }
 
-test("cancelar interrumpe una peticion API lenta", async ({ page }) => {
+test("cancelar interrumpe una petición API lenta sin guardar ni descargar", async ({ page }) => {
   await installBrowserMocks(page);
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -195,6 +199,10 @@ test("cancelar interrumpe una peticion API lenta", async ({ page }) => {
   await page.locator("#ft-cancel").click();
   await expect(page.locator("#ft-status")).toContainText("Cancelado", { timeout: 3000 });
 
-  const downloads = await page.evaluate(() => globalThis.__ftTest.downloads);
-  expect(downloads).toEqual([]);
+  const result = await page.evaluate(() => ({
+    downloads: globalThis.__ftTest.downloads,
+    storage: globalThis.__ftTest.storage,
+  }));
+  expect(result.downloads).toEqual([]);
+  expect(result.storage.ft_history_demo_profile).toBeUndefined();
 });
