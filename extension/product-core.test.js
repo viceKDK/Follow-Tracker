@@ -51,7 +51,12 @@ test("ordena actividad de mas reciente a mas antigua", () => {
 test("valida backup completo y acepta snapshot heredado", () => {
   const complete = Product.validateBackupPayload({
     snapshot: { profile: "Demo", followers: ["ana"], following: ["ana"] },
-    timeline: { profile: "demo", baseline: {}, reports: [], events: [] },
+    timeline: {
+      profile: "demo",
+      baseline: { reportId: "r1", capturedAt: "2026-08-20T10:00:00Z", followers: ["ana"], following: ["ana"] },
+      reports: [],
+      events: [],
+    },
   });
   assert.equal(complete.ok, true);
   assert.equal(complete.profile, "demo");
@@ -73,6 +78,37 @@ test("rechaza backup con perfiles distintos o sin listas", () => {
   const invalid = Product.validateBackupPayload({ snapshot: { profile: "demo" } });
   assert.equal(invalid.ok, false);
   assert.match(invalid.errors.join(" "), /followers/);
+});
+
+
+test("rechaza línea temporal con reportes o eventos corruptos", () => {
+  const invalid = Product.validateBackupPayload({
+    snapshot: { profile: "demo", followers: ["ana"], following: [], updatedAt: "2026-08-24T10:00:00Z" },
+    timeline: {
+      profile: "demo",
+      baseline: { reportId: "r1", capturedAt: "2026-08-20T10:00:00Z", followers: ["ana"], following: [] },
+      reports: [{ id: "", capturedAt: "no-es-fecha" }],
+      events: [{ username: "", type: "", occurredAt: "no-es-fecha" }],
+    },
+  });
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.errors.join(" "), /reporte.*identificador/i);
+  assert.match(invalid.errors.join(" "), /evento.*usuario/i);
+  assert.match(invalid.errors.join(" "), /fecha válida/i);
+});
+
+test("acepta tipos históricos desconocidos con advertencia y no pierde el backup", () => {
+  const result = Product.validateBackupPayload({
+    snapshot: { profile: "demo", followers: [], following: [], updatedAt: "2026-08-24T10:00:00Z" },
+    timeline: {
+      profile: "demo",
+      baseline: { reportId: "r1", capturedAt: "2026-08-20T10:00:00Z", followers: [], following: [] },
+      reports: [{ id: "r1", capturedAt: "2026-08-20T10:00:00Z" }],
+      events: [{ id: "e1", username: "ana", type: "legacy_event", occurredAt: "2026-08-21T10:00:00Z" }],
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.ok(result.warnings.some((message) => /tipo desconocido/i.test(message)));
 });
 
 test("diagnostica historial consistente", () => {

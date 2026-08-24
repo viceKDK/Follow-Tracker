@@ -127,7 +127,7 @@ Usar datos sintéticos o un backup de prueba grande.
 - [ ] Rechazar captura y timeline de perfiles distintos.
 - [ ] Rechazar timeline con reportes y sin baseline.
 - [ ] Pedir confirmación antes de reemplazar un perfil existente.
-- [ ] Rechazar archivos de más de 25 MB con mensaje comprensible.
+- [ ] Rechazar archivos de más de 100 MB con mensaje comprensible.
 
 ## 10. Salud del historial
 

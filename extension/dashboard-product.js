@@ -268,8 +268,8 @@
 
   async function importBackup(file) {
     if (!file) return;
-    if (file.size > 25 * 1024 * 1024) {
-      showToast("El backup supera 25 MB. Dividilo o revisá que sea el archivo correcto.", "error");
+    if (file.size > 100 * 1024 * 1024) {
+      showToast("El backup supera 100 MB. Dividilo o revisá que sea el archivo correcto.", "error");
       return;
     }
 

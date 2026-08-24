@@ -233,13 +233,22 @@
     const looksLikeSnapshot = Array.isArray(payload.followers) || Array.isArray(payload.following);
     const snapshot = looksLikeSnapshot ? payload : payload.snapshot;
     const timeline = looksLikeSnapshot ? null : payload.timeline || null;
+    const snapshotProfile = normalizedProfile(snapshot && snapshot.profile);
+    const timelineProfile = normalizedProfile(timeline && timeline.profile);
 
     if (!snapshot || typeof snapshot !== "object") {
       errors.push("Falta la captura actual (`snapshot`).");
     } else {
       if (!Array.isArray(snapshot.followers)) errors.push("`snapshot.followers` debe ser una lista.");
       if (!Array.isArray(snapshot.following)) errors.push("`snapshot.following` debe ser una lista.");
-      if (!normalizedProfile(snapshot.profile)) errors.push("La captura no identifica el perfil.");
+      if (!snapshotProfile) errors.push("La captura no identifica el perfil.");
+      if (snapshot.updatedAt && validDateMs(snapshot.updatedAt) == null) {
+        errors.push("`snapshot.updatedAt` no contiene una fecha válida.");
+      }
+      const duplicateFollowers = duplicateUsernames(snapshot.followers);
+      const duplicateFollowing = duplicateUsernames(snapshot.following);
+      if (duplicateFollowers.length) warnings.push(`${duplicateFollowers.length} seguidor(es) duplicado(s) serán normalizados.`);
+      if (duplicateFollowing.length) warnings.push(`${duplicateFollowing.length} cuenta(s) seguida(s) duplicada(s) serán normalizadas.`);
     }
 
     if (!timeline) {
@@ -247,15 +256,57 @@
     } else if (typeof timeline !== "object") {
       errors.push("`timeline` debe ser un objeto.");
     } else {
-      if (!Array.isArray(timeline.reports)) errors.push("`timeline.reports` debe ser una lista.");
-      if (!Array.isArray(timeline.events)) errors.push("`timeline.events` debe ser una lista.");
-      if (Array.isArray(timeline.reports) && timeline.reports.length && !timeline.baseline) {
+      const reports = Array.isArray(timeline.reports) ? timeline.reports : null;
+      const events = Array.isArray(timeline.events) ? timeline.events : null;
+      if (!reports) errors.push("`timeline.reports` debe ser una lista.");
+      if (!events) errors.push("`timeline.events` debe ser una lista.");
+
+      if (reports && reports.length && !timeline.baseline) {
         errors.push("La línea temporal tiene reportes, pero no tiene línea base.");
+      }
+
+      if (timeline.baseline) {
+        if (typeof timeline.baseline !== "object") {
+          errors.push("`timeline.baseline` debe ser un objeto.");
+        } else {
+          if (!String(timeline.baseline.reportId || "").trim()) errors.push("La línea base no identifica su reporte.");
+          if (validDateMs(timeline.baseline.capturedAt) == null) errors.push("La línea base no tiene una fecha válida.");
+          if (!Array.isArray(timeline.baseline.followers)) errors.push("`timeline.baseline.followers` debe ser una lista.");
+          if (!Array.isArray(timeline.baseline.following)) errors.push("`timeline.baseline.following` debe ser una lista.");
+          const baselineProfile = normalizedProfile(timeline.baseline.profile);
+          if (baselineProfile && timelineProfile && baselineProfile !== timelineProfile) {
+            errors.push("La línea base pertenece a un perfil distinto al de la línea temporal.");
+          }
+        }
+      }
+
+      if (reports) {
+        const invalidReportObjects = reports.filter((report) => !report || typeof report !== "object").length;
+        const invalidReportIds = reports.filter((report) => report && typeof report === "object" && !String(report.id || report.runId || "").trim()).length;
+        const invalidReportDates = reports.filter((report) => report && typeof report === "object" && validDateMs(report.capturedAt) == null).length;
+        const duplicateReports = countDuplicateIds(reports.map((report) => report && ({ id: report.id || report.runId })));
+        if (invalidReportObjects) errors.push(`${invalidReportObjects} reporte(s) no son objetos válidos.`);
+        if (invalidReportIds) errors.push(`${invalidReportIds} reporte(s) no tienen identificador.`);
+        if (invalidReportDates) errors.push(`${invalidReportDates} reporte(s) no tienen fecha válida.`);
+        if (duplicateReports) warnings.push(`${duplicateReports} reporte(s) duplicado(s) serán normalizados.`);
+      }
+
+      if (events) {
+        const invalidEventObjects = events.filter((event) => !event || typeof event !== "object").length;
+        const invalidEventUsers = events.filter((event) => event && typeof event === "object" && !normalizeUsername(event.username)).length;
+        const invalidEventTypes = events.filter((event) => event && typeof event === "object" && !String(event.type || "").trim()).length;
+        const invalidEventDates = events.filter((event) => event && typeof event === "object" && validDateMs(event.occurredAt) == null).length;
+        const unknownEventTypes = events.filter((event) => event && typeof event === "object" && String(event.type || "").trim() && !EVENT_TYPES.includes(String(event.type))).length;
+        const duplicateEvents = countDuplicateIds(events);
+        if (invalidEventObjects) errors.push(`${invalidEventObjects} evento(s) no son objetos válidos.`);
+        if (invalidEventUsers) errors.push(`${invalidEventUsers} evento(s) no identifican usuario.`);
+        if (invalidEventTypes) errors.push(`${invalidEventTypes} evento(s) no identifican tipo.`);
+        if (invalidEventDates) errors.push(`${invalidEventDates} evento(s) no tienen fecha válida.`);
+        if (unknownEventTypes) warnings.push(`${unknownEventTypes} evento(s) usan un tipo desconocido.`);
+        if (duplicateEvents) warnings.push(`${duplicateEvents} evento(s) duplicado(s) serán normalizados.`);
       }
     }
 
-    const snapshotProfile = normalizedProfile(snapshot && snapshot.profile);
-    const timelineProfile = normalizedProfile(timeline && timeline.profile);
     if (snapshotProfile && timelineProfile && snapshotProfile !== timelineProfile) {
       errors.push("La captura y la línea temporal pertenecen a perfiles distintos.");
     }
