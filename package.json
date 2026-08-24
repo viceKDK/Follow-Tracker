@@ -5,9 +5,12 @@
   "description": "Extensión Manifest V3 para guardar capturas locales de Instagram, comparar relaciones entre fechas y auditar el historial sin backend.",
   "scripts": {
     "test": "node --test extension/core.test.js extension/history.test.js extension/export-policy.test.js extension/product-core.test.js extension/background.test.js",
-    "check": "node --check extension/core.js && node --check extension/history.js && node --check extension/export-policy.js && node --check extension/product-core.js && node --check extension/content.js && node --check extension/background.js && node --check extension/popup.js && node --check extension/dashboard.js && node --check extension/dashboard-table.js && node --check extension/dashboard-ux.js && node --check extension/dashboard-product.js && node -e \"JSON.parse(require('node:fs').readFileSync('extension/manifest.json','utf8'))\" && node -e \"const fs=require('node:fs'); const m=JSON.parse(fs.readFileSync('extension/manifest.json','utf8')); for (const p of Object.values(m.icons || {})) if (!fs.existsSync('extension/'+p)) throw new Error('Falta icono: '+p)\"",
+    "validate:extension": "node scripts/validate-extension.js",
+    "check": "node --check extension/core.js && node --check extension/history.js && node --check extension/export-policy.js && node --check extension/product-core.js && node --check extension/content.js && node --check extension/background.js && node --check extension/popup.js && node --check extension/dashboard.js && node --check extension/dashboard-table.js && node --check extension/dashboard-ux.js && node --check extension/dashboard-product.js && node --check tests/e2e/dashboard.spec.js && node scripts/validate-extension.js",
     "e2e:fixture": "node tests/e2e/smoke-fixture.js",
-    "e2e": "playwright test tests/e2e/extension.spec.js"
+    "e2e:instagram": "playwright test tests/e2e/extension.spec.js",
+    "e2e:dashboard": "playwright test tests/e2e/dashboard.spec.js",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0"
