@@ -2,11 +2,16 @@
 
 (function loadDashboardEnhancements() {
   const files = [
+    "trust-core.js",
+    "capture-store.js",
     "product-core.js",
     "maintenance.js",
     "dashboard-ux.js",
     "dashboard-product.js",
     "dashboard-maintenance.js",
+    "dashboard-backup.js",
+    "dashboard-identity.js",
+    "dashboard-admin.js",
   ];
 
   function loadAt(index) {
