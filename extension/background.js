@@ -1,4 +1,4 @@
-importScripts("core.js", "history.js");
+importScripts("core.js", "history.js", "history-guard.js");
 
 const HISTORY_PREFIX = "ft_history_";
 const TIMELINE_PREFIX = "ft_timeline_";
