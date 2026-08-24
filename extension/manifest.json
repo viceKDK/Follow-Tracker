@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Follow Tracker - Antes y ahora",
-  "description": "Guarda capturas locales, compara seguidores y seguidos entre fechas y exporta únicamente cuando vos lo pedís.",
-  "version": "2.2.0",
+  "description": "Captura, revisa y compara seguidores de Instagram con historial local, identidad estable y backups manuales.",
+  "version": "3.0.0",
   "permissions": [
     "activeTab",
     "storage",
@@ -38,8 +38,13 @@
       ],
       "js": [
         "core.js",
-        "content.js",
-        "export-policy.js"
+        "trust-core.js",
+        "capture-store.js",
+        "instagram-api.js",
+        "instagram-ui.js",
+        "analysis-overlay.js",
+        "analysis-controller.js",
+        "content-entry.js"
       ],
       "run_at": "document_idle"
     }

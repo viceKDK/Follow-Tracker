@@ -10,9 +10,9 @@ const fixtureHtml = fs.readFileSync(
   "utf8"
 );
 
-async function installBrowserMocks(page) {
-  await page.addInitScript(() => {
-    const storage = {};
+async function installBrowserMocks(page, seed = {}) {
+  await page.addInitScript(({ initialStorage }) => {
+    const storage = JSON.parse(JSON.stringify(initialStorage || {}));
     const listeners = [];
     const messages = [];
     const downloads = [];
@@ -33,7 +33,12 @@ async function installBrowserMocks(page) {
       storage: {
         local: {
           get(keys, callback) {
-            const requested = Array.isArray(keys) ? keys : Object.keys(storage);
+            if (keys == null) { callback({ ...storage }); return; }
+            const requested = typeof keys === "string"
+              ? [keys]
+              : Array.isArray(keys)
+                ? keys
+                : Object.keys(keys || {});
             const result = {};
             requested.forEach((key) => {
               if (Object.prototype.hasOwnProperty.call(storage, key)) result[key] = storage[key];
@@ -72,24 +77,24 @@ async function installBrowserMocks(page) {
       listeners.forEach((listener) => listener(message, {}, respond));
       setTimeout(() => respond({ ok: false, error: "Sin respuesta" }), 100);
     });
-  });
+  }, { initialStorage: seed });
 }
 
-async function mockInstagram(page, counts) {
+async function mockInstagram(page, counts, custom = {}) {
   const unexpected = [];
-  const followers = counts.followers === 0
+  const followers = custom.followers || (counts.followers === 0
     ? []
     : [
-        { username: "ana", full_name: "Ana Demo" },
-        { username: "beto", full_name: "Beto Demo" },
-        { username: "carla", full_name: "Carla Demo" },
-      ];
-  const following = counts.following === 0
+        { pk: "1", username: "ana", full_name: "Ana Demo" },
+        { pk: "2", username: "beto", full_name: "Beto Demo" },
+        { pk: "3", username: "carla", full_name: "Carla Demo" },
+      ]);
+  const following = custom.following || (counts.following === 0
     ? []
     : [
-        { username: "ana", full_name: "Ana Demo" },
-        { username: "diana", full_name: "Diana Demo" },
-      ];
+        { pk: "1", username: "ana", full_name: "Ana Demo" },
+        { pk: "4", username: "diana", full_name: "Diana Demo" },
+      ]);
 
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -105,6 +110,7 @@ async function mockInstagram(page, counts) {
           data: {
             user: {
               id: "123",
+              username: "demo_profile",
               is_private: false,
               followed_by_viewer: true,
               edge_followed_by: { count: counts.followers },
@@ -130,31 +136,42 @@ async function mockInstagram(page, counts) {
 }
 
 async function loadExtension(page) {
-  await page.addScriptTag({ path: path.join(projectRoot, "extension", "core.js") });
-  await page.addScriptTag({ path: path.join(projectRoot, "extension", "content.js") });
-  await page.addScriptTag({ path: path.join(projectRoot, "extension", "export-policy.js") });
+  const files = [
+    "core.js",
+    "trust-core.js",
+    "capture-store.js",
+    "instagram-api.js",
+    "instagram-ui.js",
+    "analysis-overlay.js",
+    "analysis-controller.js",
+    "content-entry.js",
+  ];
+  for (const file of files) {
+    await page.addScriptTag({ path: path.join(projectRoot, "extension", file) });
+  }
   const response = await page.evaluate(() => globalThis.__ftDispatch({ type: "SHOW_OVERLAY" }));
   expect(response).toEqual({ ok: true, error: null });
+}
+
+async function runAndSave(page) {
+  await page.locator("#ft3-start").click();
+  await expect(page.locator("#ft3-review")).toBeVisible({ timeout: 15000 });
+  await page.locator('[data-review="save"]').click();
+  await expect(page.locator("#ft3-status")).toContainText("Reporte guardado", { timeout: 5000 });
 }
 
 for (const scenario of [
   { name: "perfil con relaciones", followers: 3, following: 2 },
   { name: "cuenta completamente vacía", followers: 0, following: 0 },
 ]) {
-  test(`extensión completa el flujo API y guarda localmente para ${scenario.name}`, async ({ page }) => {
-    page.on("console", (message) => {
-      if (message.type() === "warning" || message.type() === "error") {
-        console.log(`[browser:${message.type()}] ${message.text()}`);
-      }
-    });
+  test(`revisa y guarda localmente una captura API para ${scenario.name}`, async ({ page }) => {
     await installBrowserMocks(page);
     const unexpected = await mockInstagram(page, scenario);
     await page.goto("https://www.instagram.com/demo_profile/");
     await loadExtension(page);
 
-    await expect(page.locator("#ft-profile")).toHaveText("demo_profile");
-    await page.locator("#ft-start").click();
-    await expect(page.locator("#ft-status")).toContainText("Finalizado (modo API)", { timeout: 15000 });
+    await expect(page.locator("#ft3-profile")).toHaveText("@demo_profile");
+    await runAndSave(page);
 
     const result = await page.evaluate(() => ({
       downloads: globalThis.__ftTest.downloads,
@@ -162,21 +179,63 @@ for (const scenario of [
       storage: globalThis.__ftTest.storage,
     }));
 
-    // El análisis nunca debe llenar Descargas. Los CSV/JSON se generan solamente
-    // cuando el usuario los solicita desde el dashboard.
     expect(result.downloads).toEqual([]);
-    const suppressed = result.messages.filter((message) => message.type === "legacy-report-suppressed");
-    expect(suppressed).toHaveLength(1);
-    expect(suppressed[0].filename).toMatch(/^ig_auto_.*\.(?:csv|xls)$/i);
-
+    expect(result.messages.filter((message) => message.type === "capture-saved")).toHaveLength(1);
     expect(result.storage.ft_history_demo_profile.followers).toHaveLength(scenario.followers);
     expect(result.storage.ft_history_demo_profile.following).toHaveLength(scenario.following);
-    expect(result.storage.ft_history_demo_profile.profile).toBe("demo_profile");
+    expect(result.storage.ft_capture_meta_demo_profile.reports).toBeTruthy();
+    expect(result.storage.ft_identity_demo_profile).toBeTruthy();
+    expect(result.storage.ft_pending_capture_demo_profile).toBeUndefined();
     expect(unexpected).toEqual([]);
   });
 }
 
-test("cancelar interrumpe una petición API lenta sin guardar ni descargar", async ({ page }) => {
+test("un ID estable conserva la misma persona cuando cambia de username", async ({ page }) => {
+  const seed = {
+    ft_history_demo_profile: {
+      schemaVersion: 3,
+      profile: "demo_profile",
+      followers: ["nombre_viejo"],
+      following: ["nombre_viejo"],
+      updatedAt: "2026-08-20T10:00:00Z",
+      runId: "r1",
+    },
+    ft_identity_demo_profile: {
+      schemaVersion: 1,
+      profile: "demo_profile",
+      records: {
+        "id:77": {
+          key: "id:77",
+          instagramUserId: "77",
+          canonicalUsername: "nombre_viejo",
+          currentUsername: "nombre_viejo",
+          previousUsernames: ["nombre_viejo"],
+          firstSeenAt: "2026-08-20T10:00:00Z",
+          lastSeenAt: "2026-08-20T10:00:00Z",
+        },
+      },
+      aliases: { nombre_viejo: "id:77" },
+    },
+    ft_settings: { confirmRemovalsAfter: 2 },
+  };
+  await installBrowserMocks(page, seed);
+  await mockInstagram(page, { followers: 1, following: 1 }, {
+    followers: [{ pk: "77", username: "nombre_nuevo", full_name: "Persona" }],
+    following: [{ pk: "77", username: "nombre_nuevo", full_name: "Persona" }],
+  });
+  await page.goto("https://www.instagram.com/demo_profile/");
+  await loadExtension(page);
+  await runAndSave(page);
+
+  const result = await page.evaluate(() => globalThis.__ftTest.storage);
+  expect(result.ft_history_demo_profile.followers).toEqual(["nombre_viejo"]);
+  expect(result.ft_identity_demo_profile.records["id:77"].currentUsername).toBe("nombre_nuevo");
+  const metadata = Object.values(result.ft_capture_meta_demo_profile.reports)[0];
+  expect(metadata.renames).toHaveLength(1);
+  expect(metadata.changes.lostFollowers).toEqual([]);
+});
+
+test("cancelar interrumpe una petición API lenta sin guardar", async ({ page }) => {
   await installBrowserMocks(page);
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -194,10 +253,10 @@ test("cancelar interrumpe una petición API lenta sin guardar ni descargar", asy
 
   await page.goto("https://www.instagram.com/demo_profile/");
   await loadExtension(page);
-  await page.locator("#ft-start").click();
+  await page.locator("#ft3-start").click();
   await page.waitForTimeout(200);
-  await page.locator("#ft-cancel").click();
-  await expect(page.locator("#ft-status")).toContainText("Cancelado", { timeout: 3000 });
+  await page.locator("#ft3-cancel").click();
+  await expect(page.locator("#ft3-status")).toContainText("cancelado", { timeout: 3000 });
 
   const result = await page.evaluate(() => ({
     downloads: globalThis.__ftTest.downloads,
@@ -205,4 +264,5 @@ test("cancelar interrumpe una petición API lenta sin guardar ni descargar", asy
   }));
   expect(result.downloads).toEqual([]);
   expect(result.storage.ft_history_demo_profile).toBeUndefined();
+  expect(result.storage.ft_pending_capture_demo_profile).toBeUndefined();
 });

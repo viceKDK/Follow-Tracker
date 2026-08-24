@@ -46,15 +46,20 @@ function requireExtensionFile(reference, source) {
   }
 }
 
+function requireRootFile(relativePath) {
+  const absolutePath = path.join(root, relativePath);
+  if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
+    fail(`Falta ${relativePath}`);
+  }
+}
+
 function collectHtmlReferences(relativePath) {
   const absolutePath = path.join(root, relativePath);
   const html = fs.readFileSync(absolutePath, "utf8");
   const referencePattern = /<(?:script|link)\b[^>]*(?:src|href)=["']([^"']+)["'][^>]*>/gi;
   let match;
   while ((match = referencePattern.exec(html))) requireExtensionFile(match[1], relativePath);
-
-  const inlineRemoteScript = /<script\b[^>]*src=["'](?:https?:)?\/\//i.test(html);
-  if (inlineRemoteScript) fail(`${relativePath}: contiene un script remoto`);
+  if (/<script\b[^>]*src=["'](?:https?:)?\/\//i.test(html)) fail(`${relativePath}: contiene un script remoto`);
 }
 
 function walk(directory) {
@@ -101,6 +106,11 @@ if (packageJson && manifest) {
     (entry.js || []).forEach((reference) => requireExtensionFile(reference, `manifest.content_scripts[${index}].js`));
     (entry.css || []).forEach((reference) => requireExtensionFile(reference, `manifest.content_scripts[${index}].css`));
   });
+
+  const loadedContent = (manifest.content_scripts || []).flatMap((entry) => entry.js || []);
+  for (const legacy of ["content.js", "export-policy.js"]) {
+    if (loadedContent.includes(legacy)) fail(`El manifest todavía carga el runtime heredado ${legacy}`);
+  }
 }
 
 for (const htmlPath of walk(extensionDir).filter((file) => file.endsWith(".html"))) {
@@ -110,25 +120,41 @@ for (const htmlPath of walk(extensionDir).filter((file) => file.endsWith(".html"
 const runtimeReferences = [
   "core.js",
   "history.js",
+  "history-guard.js",
+  "history-quality.js",
   "maintenance.js",
   "product-core.js",
+  "trust-core.js",
+  "capture-store.js",
+  "instagram-api.js",
+  "instagram-ui.js",
+  "analysis-overlay.js",
+  "analysis-controller.js",
+  "content-entry.js",
   "dashboard.js",
   "dashboard-table.js",
   "dashboard-ux.js",
   "dashboard-product.js",
   "dashboard-maintenance.js",
+  "dashboard-backup.js",
+  "dashboard-identity.js",
+  "dashboard-admin.js",
+  "dashboard-integrity.js",
   "dashboard.css",
   "dashboard-table.css",
   "dashboard-ux.css",
   "dashboard-product.css",
   "dashboard-maintenance.css",
+  "dashboard-trust.css",
   "popup.js",
   "popup.css",
-  "content.js",
   "background.js",
-  "export-policy.js",
 ];
 runtimeReferences.forEach((reference) => requireExtensionFile(reference, "runtime requerido"));
+
+for (const legacy of ["content.js", "export-policy.js"]) {
+  if (fs.existsSync(path.join(extensionDir, legacy))) fail(`El archivo heredado extension/${legacy} debe eliminarse del paquete 3.0`);
+}
 
 for (const jsPath of walk(extensionDir).filter((file) => file.endsWith(".js") && !file.endsWith(".test.js"))) {
   const relativePath = path.relative(root, jsPath);
@@ -138,9 +164,13 @@ for (const jsPath of walk(extensionDir).filter((file) => file.endsWith(".js") &&
   if (/import\s*\(\s*["']https?:\/\//i.test(source)) fail(`${relativePath}: importa código remoto`);
 }
 
+for (const requiredDocument of ["PRIVACY_POLICY.md", "STORE_LISTING.md", "CHANGELOG.md", "docs/MIGRATION-3.0.md"]) {
+  requireRootFile(requiredDocument);
+}
+
 if (packageJson) {
   const scripts = packageJson.scripts || {};
-  for (const required of ["test", "check", "e2e", "e2e:fixture"]) {
+  for (const required of ["test", "check", "e2e", "e2e:fixture", "package"]) {
     if (!scripts[required]) fail(`package.json: falta el script ${required}`);
   }
 }

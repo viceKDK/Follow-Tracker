@@ -1,14 +1,15 @@
-name: CI
+name: Release
 
 on:
   push:
-  pull_request:
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  test:
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,18 +18,23 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: npm test
       - run: npm run check
-      - run: npm run e2e:fixture
-      - run: npm run e2e
       - run: npm run package
       - uses: actions/upload-artifact@v4
-        if: always() && hashFiles('dist/*.zip') != ''
         with:
-          name: follow-tracker-package-${{ github.sha }}
+          name: follow-tracker-${{ github.ref_name }}
           path: |
             dist/*.zip
             dist/*.sha256
             dist/release-manifest.json
-          retention-days: 7
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/*.zip \
+            dist/*.sha256 \
+            dist/release-manifest.json \
+            --title "Follow Tracker ${GITHUB_REF_NAME}" \
+            --generate-notes

@@ -221,27 +221,33 @@ test("deshace el último reporte y permite restaurarlo una vez", async ({ page }
   await expect(page.locator("#rollback-summary")).toContainText("r1");
   await expect(page.locator("#rollback-latest-report")).toBeEnabled();
 
+  const rollbackReload = page.waitForNavigation({ waitUntil: "domcontentloaded" });
   await page.locator("#rollback-latest-report").click();
-  await page.waitForFunction(() => {
-    const timeline = globalThis.__ftRollbackTest.storage.ft_timeline_rollback_demo;
-    return timeline && timeline.reports.length === 1 && Boolean(globalThis.__ftRollbackTest.storage.ft_recovery_rollback_demo);
-  });
+  await rollbackReload;
+  await expect(page.locator("#dashboard-content")).toBeVisible();
+
+  const rolledBack = await page.evaluate(() => ({
+    timeline: globalThis.__ftRollbackTest.storage.ft_timeline_rollback_demo,
+    recovery: globalThis.__ftRollbackTest.storage.ft_recovery_rollback_demo,
+  }));
+  expect(rolledBack.timeline.reports).toHaveLength(1);
+  expect(rolledBack.recovery).toBeTruthy();
 
   await expect(page.locator("#restore-rollback")).toBeVisible({ timeout: 7000 });
   await expect(page.locator("#restore-rollback")).toBeEnabled();
   await expect(page.locator("#rollback-latest-report")).toBeDisabled();
 
+  const restoreReload = page.waitForNavigation({ waitUntil: "domcontentloaded" });
   await page.locator("#restore-rollback").click();
-  await page.waitForFunction(() => {
-    const storage = globalThis.__ftRollbackTest.storage;
-    const timeline = storage.ft_timeline_rollback_demo;
-    return timeline && timeline.reports.length === 2 && !storage.ft_recovery_rollback_demo;
-  });
+  await restoreReload;
+  await expect(page.locator("#dashboard-content")).toBeVisible();
 
   const restored = await page.evaluate(() => ({
     snapshot: globalThis.__ftRollbackTest.storage.ft_history_rollback_demo,
     timeline: globalThis.__ftRollbackTest.storage.ft_timeline_rollback_demo,
+    recovery: globalThis.__ftRollbackTest.storage.ft_recovery_rollback_demo,
   }));
+  expect(restored.recovery).toBeUndefined();
   expect(restored.snapshot.reportId).toBe("r2");
   expect(restored.snapshot.followers).toEqual(["ana", "carla"]);
   expect(restored.timeline.reports.map((report) => report.id)).toEqual(["r1", "r2"]);

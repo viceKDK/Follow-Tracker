@@ -1,13 +1,27 @@
-# Capturas y documentación del producto
+# Documentación de Follow Tracker
 
-Esta carpeta contiene imágenes y controles de calidad para documentar la instalación, el análisis y el frontend de Follow Tracker.
+Esta carpeta reúne capturas, migraciones, arquitectura y controles de calidad del producto.
+
+## Producto 3.0
+
+- `MIGRATION-3.0.md`: actualización desde historiales 2.x, claves nuevas y cambios del flujo de guardado.
+- `ARCHITECTURE-3.0.md`: módulos de captura, identidad, administración y distribución.
+- `RECOVERY.md`: deshacer el último reporte y restaurarlo de forma segura.
+- `FINAL-QA.md`: checklist de instalación, capturas, identidad, importación oficial, backups, volumen, accesibilidad y release.
 
 ## Frontend
 
-- `dashboard-showcase.webp`: captura principal de la pestaña **Antes y ahora**, donde se compara la relación anterior y actual de cada persona.
+- `dashboard-showcase.webp`: captura principal de **Antes y ahora**.
 - `dashboard-demo.png`: captura histórica del dashboard anterior.
 
-La pestaña principal del producto es **Antes y ahora**. Allí se selecciona un reporte anterior y uno actual para ver cómo cambió la relación con cada persona.
+La pantalla principal sigue siendo **Antes y ahora**, pero la versión 3 agrega:
+
+- revisión de calidad antes de guardar;
+- identidad estable ante cambios de username;
+- notas, etiquetas y fijados;
+- importación oficial;
+- administración de perfiles y reportes;
+- recordatorio de backup.
 
 ## Instalación
 
@@ -16,19 +30,15 @@ La pestaña principal del producto es **Antes y ahora**. Allí se selecciona un 
 - `03-load-unpacked.png`: carga de la carpeta `extension/`.
 - `04-pin-icon.png`: fijar el icono de Follow Tracker.
 
-## Análisis
+## Captura heredada
 
-- `05-overlay.png`: panel flotante sobre Instagram.
-- `07-profile-open.png`: perfil abierto.
-- `08-analysis-running.png`: análisis en curso.
-- `09-analysis-finished.png`: análisis finalizado.
+Las imágenes siguientes corresponden al flujo anterior y se conservan como referencia histórica:
 
-## Recuperación
+- `05-overlay.png`;
+- `07-profile-open.png`;
+- `08-analysis-running.png`;
+- `09-analysis-finished.png`.
 
-- `RECOVERY.md`: cómo deshacer el último reporte, restaurarlo una vez y evitar sobrescribir análisis posteriores.
+La versión 3 utiliza un panel nuevo con revisión antes de guardar. Las capturas finales para tiendas deben actualizarse antes de publicar la extensión.
 
-## Calidad
-
-- `FINAL-QA.md`: checklist de instalación, análisis, comparaciones, volumen, backup, privacidad, accesibilidad y release.
-
-Todas las cuentas y cifras usadas para mostrar el frontend son ficticias.
+Todas las cuentas y cifras utilizadas en la documentación son ficticias.
