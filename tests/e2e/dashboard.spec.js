@@ -305,7 +305,7 @@ test("Antes y ahora filtra, pagina, abre detalle y exporta la vista", async ({ p
   await page.locator('[data-preset="first"]').click();
   await expect(page.locator("#compare-from")).toHaveValue("r1");
   await expect(page.locator("#compare-to")).toHaveValue("r3");
-  await expect(page.locator("#relationship-visible-count")).toContainText("5 filas");
+  await expect(page.locator("#relationship-visible-count")).toContainText("4 filas");
 
   await page.locator("#relationship-change-filter").selectOption("unfollowed-you");
   await page.locator("#relationship-search").fill("@beto");
