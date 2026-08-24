@@ -9,6 +9,7 @@
   let captureMetadata = { schemaVersion: 1, profile: "", reports: {} };
   let selectedCanonical = "";
   let observer = null;
+  let decorationScheduled = false;
 
   function storageSet(values) {
     return new Promise((resolve, reject) => {
@@ -78,22 +79,26 @@
     const current = displayFor(canonical);
     const record = recordFor(canonical);
     const meta = metadataFor(canonical);
+    const signature = JSON.stringify({ current, canonical, pinned: meta.pinned, tags: meta.tags });
+    if (row.dataset.trustSignature === signature) return;
+    row.dataset.trustSignature = signature;
+
     const strong = row.querySelector(".table-user-content strong,.person-main strong");
-    if (strong) {
-      strong.textContent = `@${current}`;
-      strong.querySelector(".person-pin")?.remove();
-      if (meta.pinned && !strong.parentElement.querySelector(".person-pin")) {
-        strong.insertAdjacentHTML("afterend", '<span class="person-pin" title="Persona fijada">★</span>');
-      }
+    if (strong) strong.textContent = `@${current}`;
+    const strongParent = strong && strong.parentElement;
+    if (strongParent) {
+      strongParent.querySelector(":scope > .person-pin")?.remove();
+      if (meta.pinned) strong.insertAdjacentHTML("afterend", '<span class="person-pin" title="Persona fijada">★</span>');
     }
     const link = row.querySelector("a.profile-link");
     if (link) link.href = `https://www.instagram.com/${encodeURIComponent(current)}/`;
     const copy = row.querySelector(".table-user-content > span:last-child,.person-main");
-    if (copy && record && record.currentUsername !== record.canonicalUsername && !copy.querySelector(".identity-renamed")) {
-      copy.insertAdjacentHTML("beforeend", `<small class="identity-renamed">Antes @${escapeHtml(record.canonicalUsername)}</small>`);
-    }
     if (copy) {
+      copy.querySelector(".identity-renamed")?.remove();
       copy.querySelector(".person-tags")?.remove();
+      if (record && record.currentUsername !== record.canonicalUsername) {
+        copy.insertAdjacentHTML("beforeend", `<small class="identity-renamed">Antes @${escapeHtml(record.canonicalUsername)}</small>`);
+      }
       if (meta.tags.length) {
         copy.insertAdjacentHTML("beforeend", `<span class="person-tags">${meta.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</span>`);
       }
@@ -101,16 +106,25 @@
   }
 
   function decorateVisiblePeople() {
+    decorationScheduled = false;
     document.querySelectorAll(".clickable-table-row[data-user]").forEach(decorateRow);
     const drawer = document.querySelector("#drawer-user");
     if (drawer && drawer.textContent) {
       const canonical = selectedCanonical || canonicalFor(drawer.textContent);
       const current = displayFor(canonical);
-      drawer.textContent = `@${current}`;
+      const nextText = `@${current}`;
+      if (drawer.textContent !== nextText) drawer.textContent = nextText;
       const link = document.querySelector("#drawer-link");
-      if (link) link.href = `https://www.instagram.com/${encodeURIComponent(current)}/`;
+      const nextHref = `https://www.instagram.com/${encodeURIComponent(current)}/`;
+      if (link && link.href !== nextHref) link.href = nextHref;
       renderMetaEditor(canonical);
     }
+  }
+
+  function scheduleDecoration() {
+    if (decorationScheduled) return;
+    decorationScheduled = true;
+    requestAnimationFrame(decorateVisiblePeople);
   }
 
   function ensureQualityPanel() {
@@ -208,9 +222,12 @@
     if (!editor) return;
     const canonical = canonicalFor(canonicalValue);
     if (!canonical) return;
-    selectedCanonical = canonical;
     const meta = metadataFor(canonical);
+    const signature = JSON.stringify({ canonical, pinned: meta.pinned, tags: meta.tags, note: meta.note });
+    if (editor.dataset.signature === signature && document.activeElement?.closest("#person-meta-editor")) return;
+    editor.dataset.signature = signature;
     editor.dataset.canonical = canonical;
+    selectedCanonical = canonical;
     document.querySelector("#person-meta-pinned").checked = meta.pinned;
     document.querySelector("#person-meta-tags").value = meta.tags.join(", ");
     document.querySelector("#person-meta-note").value = meta.note;
@@ -238,7 +255,9 @@
     const key = Trust.storageKeys(state.profile).peopleMeta;
     await storageSet({ [key]: peopleMeta });
     if (state.storage) state.storage[key] = peopleMeta;
+    editor.dataset.signature = "";
     document.querySelector("#person-meta-status").textContent = "Nota guardada localmente.";
+    document.querySelectorAll(".clickable-table-row[data-user]").forEach((row) => { row.dataset.trustSignature = ""; });
     decorateVisiblePeople();
     if (state.filter === "watchlist") renderPeople();
   }
@@ -254,7 +273,7 @@
     const result = await originalLoadProfile(profile);
     refreshSidecars();
     renderQuality();
-    decorateVisiblePeople();
+    scheduleDecoration();
     return result;
   };
 
@@ -264,7 +283,7 @@
     originalRenderAll();
     ensureWatchlistFilter();
     renderQuality();
-    decorateVisiblePeople();
+    scheduleDecoration();
   };
 
   document.addEventListener("click", (event) => {
@@ -290,7 +309,7 @@
   function startObserver() {
     if (observer) observer.disconnect();
     const target = document.querySelector("#dashboard-content") || document.body;
-    observer = new MutationObserver(() => decorateVisiblePeople());
+    observer = new MutationObserver(scheduleDecoration);
     observer.observe(target, { childList: true, subtree: true });
   }
 
@@ -298,7 +317,7 @@
   ensureWatchlistFilter();
   ensureQualityPanel();
   renderQuality();
-  decorateVisiblePeople();
+  scheduleDecoration();
   startObserver();
 
   globalThis.FollowTrackerIdentityUi = {
