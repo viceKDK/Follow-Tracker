@@ -1,7 +1,9 @@
 (function (root, factory) {
-  const History = root && root.FollowTrackerHistory
-    ? root.FollowTrackerHistory
-    : (typeof module === "object" && module.exports ? require("./history-guard.js") : null);
+  let History = root && root.FollowTrackerHistory ? root.FollowTrackerHistory : null;
+  if (!History && typeof module === "object" && module.exports) {
+    History = require("./history.js");
+    require("./history-guard.js");
+  }
   const api = factory(History);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (History) Object.assign(History, api);
