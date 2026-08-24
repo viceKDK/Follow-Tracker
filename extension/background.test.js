@@ -8,9 +8,10 @@ const assert = require("node:assert/strict");
 
 const extensionDir = __dirname;
 
-function createBackgroundHarness() {
+function createBackgroundHarness(options = {}) {
   const listeners = {
     installed: [],
+    startup: [],
     messages: [],
     storage: [],
     removed: [],
@@ -18,6 +19,7 @@ function createBackgroundHarness() {
   const data = {};
   const createdTabs = [];
   const sentMessages = [];
+  const executedScripts = [];
 
   const context = vm.createContext({
     console,
@@ -34,6 +36,7 @@ function createBackgroundHarness() {
       lastError: null,
       getURL(file) { return `chrome-extension://follow-tracker/${file}`; },
       onInstalled: { addListener(listener) { listeners.installed.push(listener); } },
+      onStartup: { addListener(listener) { listeners.startup.push(listener); } },
       onMessage: { addListener(listener) { listeners.messages.push(listener); } },
     },
     action: {
@@ -44,7 +47,7 @@ function createBackgroundHarness() {
       local: {
         get(keys, callback) {
           if (keys == null) { callback({ ...data }); return; }
-          const list = Array.isArray(keys) ? keys : Object.keys(keys || {});
+          const list = typeof keys === "string" ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys || {});
           const result = {};
           list.forEach((key) => {
             if (Object.prototype.hasOwnProperty.call(data, key)) result[key] = data[key];
@@ -63,17 +66,22 @@ function createBackgroundHarness() {
       onChanged: { addListener(listener) { listeners.storage.push(listener); } },
     },
     tabs: {
-      create(options) { createdTabs.push(options); },
+      create(tabOptions) { createdTabs.push(tabOptions); },
       sendMessage(tabId, message, callback) {
         sentMessages.push({ tabId, message });
-        if (message.type === "PING" || message.type === "SHOW_OVERLAY") callback({ ok: true });
-        // START_ANALYSIS se deja abierto para comprobar que el popup no espera
-        // a que termine una ejecucion que puede durar varios minutos.
+        if (message.type === "PING") {
+          callback(options.pingFails ? { ok: false } : { ok: true });
+          return;
+        }
+        if (message.type === "SHOW_OVERLAY") callback({ ok: true });
       },
       onRemoved: { addListener(listener) { listeners.removed.push(listener); } },
     },
     scripting: {
-      executeScript() { return Promise.resolve(); },
+      executeScript(request) {
+        executedScripts.push(request);
+        return Promise.resolve();
+      },
     },
   };
 
@@ -86,7 +94,7 @@ function createBackgroundHarness() {
 
   const background = fs.readFileSync(path.join(extensionDir, "background.js"), "utf8");
   vm.runInContext(background, context, { filename: "background.js" });
-  return { context, listeners, data, createdTabs, sentMessages };
+  return { context, listeners, data, createdTabs, sentMessages, executedScripts };
 }
 
 function dispatchMessage(harness, message, sender) {
@@ -101,25 +109,26 @@ function dispatchMessage(harness, message, sender) {
     harness.listeners.messages.forEach((listener) => listener(message, sender || {}, sendResponse));
     setTimeout(() => {
       if (!answered) resolve(undefined);
-    }, 40);
+    }, 60);
   });
 }
 
-test("abre el dashboard cuando se suprime el Excel heredado", async () => {
+test("abre el dashboard después de guardar una captura revisada", async () => {
   const harness = createBackgroundHarness();
   await dispatchMessage(
     harness,
-    { source: "content", type: "legacy-report-suppressed", profile: "demo_profile" },
+    { source: "content", type: "capture-saved", profile: "demo_profile", reportId: "r2" },
     { tab: { id: 7, url: "https://www.instagram.com/demo_profile/" } }
   );
+  await new Promise((resolve) => setTimeout(resolve, 380));
   assert.equal(harness.createdTabs.length, 1);
   assert.equal(
     harness.createdTabs[0].url,
-    "chrome-extension://follow-tracker/dashboard.html?profile=demo_profile"
+    "chrome-extension://follow-tracker/dashboard.html?profile=demo_profile#overview"
   );
 });
 
-test("el popup recibe confirmacion sin esperar a que termine el analisis", async () => {
+test("el popup recibe confirmación sin esperar la revisión final", async () => {
   const harness = createBackgroundHarness();
   const response = await dispatchMessage(
     harness,
@@ -134,10 +143,29 @@ test("el popup recibe confirmacion sin esperar a que termine el analisis", async
   );
 });
 
-test("convierte cambios de la captura actual en una linea temporal", () => {
+test("inyecta únicamente los módulos nuevos cuando el content runtime no responde", async () => {
+  const harness = createBackgroundHarness({ pingFails: true });
+  await dispatchMessage(harness, { type: "ENSURE_OVERLAY", tabId: 33 }, { tab: { id: 33 } });
+  assert.equal(harness.executedScripts.length, 1);
+  const files = harness.executedScripts[0].files;
+  assert.deepEqual(Array.from(files), [
+    "core.js",
+    "trust-core.js",
+    "capture-store.js",
+    "instagram-api.js",
+    "instagram-ui.js",
+    "analysis-overlay.js",
+    "analysis-controller.js",
+    "content-entry.js",
+  ]);
+  assert.equal(files.includes("content.js"), false);
+  assert.equal(files.includes("export-policy.js"), false);
+});
+
+test("convierte cambios de la captura aceptada en una línea temporal", () => {
   const harness = createBackgroundHarness();
   const first = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     profile: "demo_profile",
     followers: ["ana", "beto"],
     following: ["ana"],
@@ -161,4 +189,11 @@ test("convierte cambios de la captura actual en una linea temporal", () => {
   assert.equal(timeline.reports.length, 2);
   assert.deepEqual(Array.from(timeline.reports[1].changes.lostFollowers), ["beto"]);
   assert.deepEqual(Array.from(timeline.reports[1].changes.newFollowers), ["carla"]);
+});
+
+test("la migración crea una configuración segura por defecto", () => {
+  const harness = createBackgroundHarness();
+  harness.listeners.installed[0]();
+  assert.equal(harness.data.ft_settings.confirmRemovalsAfter, 2);
+  assert.equal(harness.data.ft_settings.autoAcceptTrusted, false);
 });
