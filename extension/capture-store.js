@@ -74,6 +74,23 @@
     };
   }
 
+  function confirmedChanges(previousSnapshot, absence) {
+    const previousFollowers = previousSnapshot && Array.isArray(previousSnapshot.followers)
+      ? previousSnapshot.followers
+      : [];
+    const previousFollowing = previousSnapshot && Array.isArray(previousSnapshot.following)
+      ? previousSnapshot.following
+      : [];
+    const followerChanges = Core.compareSnapshots(previousFollowers, absence.followers);
+    const followingChanges = Core.compareSnapshots(previousFollowing, absence.following);
+    return {
+      newFollowers: followerChanges.added,
+      lostFollowers: followerChanges.removed,
+      newFollowing: followingChanges.added,
+      lostFollowing: followingChanges.removed,
+    };
+  }
+
   async function stageCapture(input) {
     const value = normalizeCaptureInput(input);
     const keys = Trust.storageKeys(value.profile);
@@ -127,6 +144,13 @@
       confirmedAbsences: absence.confirmed,
       settings,
     });
+    review.changes = confirmedChanges(previousSnapshot, absence);
+    review.observedChanges = {
+      newFollowers: Core.compareSnapshots(previousSnapshot && previousSnapshot.followers || [], canonical.followerUsernames).added,
+      missingFollowers: Core.compareSnapshots(previousSnapshot && previousSnapshot.followers || [], canonical.followerUsernames).removed,
+      newFollowing: Core.compareSnapshots(previousSnapshot && previousSnapshot.following || [], canonical.followingUsernames).added,
+      missingFollowing: Core.compareSnapshots(previousSnapshot && previousSnapshot.following || [], canonical.followingUsernames).removed,
+    };
     const resolvedUsers = [...canonical.followers, ...canonical.following];
     const stage = {
       schemaVersion: 1,
@@ -239,8 +263,14 @@
   }
 
   async function importOfficialExport(profile, parts, options) {
-    const merged = Trust.mergeInstagramExportParts(parts);
-    if (!merged.complete) throw new Error("Los archivos no contienen listas de seguidores o seguidos reconocibles.");
+    const list = Array.isArray(parts) ? parts : [];
+    const hasFollowers = list.some((part) => part && part.phase === "followers");
+    const hasFollowing = list.some((part) => part && part.phase === "following");
+    if (!hasFollowers || !hasFollowing) {
+      throw new Error("Seleccioná al menos un archivo de seguidores y uno de seguidos.");
+    }
+    const merged = Trust.mergeInstagramExportParts(list);
+    if (!merged.complete) throw new Error("Los archivos no contienen listas reconocibles.");
     return stageCapture({
       profile,
       source: "instagram_export",
@@ -258,6 +288,7 @@
   return {
     captureMetaMap,
     commitStage,
+    confirmedChanges,
     discardStage,
     importOfficialExport,
     loadPending,
