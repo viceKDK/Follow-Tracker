@@ -3,7 +3,9 @@
 (function () {
   const Maintenance = globalThis.FollowTrackerMaintenance;
   const Product = globalThis.FollowTrackerProductCore;
-  if (!Maintenance) throw new Error("Follow Tracker Maintenance no fue cargado.");
+  const Runtime = globalThis.FollowTrackerDashboardRuntime;
+  const Storage = globalThis.FollowTrackerStorage;
+  if (!Maintenance || !Runtime || !Storage) throw new Error("Follow Tracker Maintenance no fue cargado.");
 
   function injectCss() {
     if (document.querySelector('link[href="dashboard-maintenance.css"]')) return;
@@ -17,25 +19,8 @@
     return `ft_recovery_${Core.safeProfile(profile)}`;
   }
 
-  function storageSet(values) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(values, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
-
-  function storageRemove(keys) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.remove(keys, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
+  const storageSet = Storage.set;
+  const storageRemove = Storage.remove;
 
   function ensurePanel() {
     const overview = document.querySelector("#overview");
@@ -210,11 +195,7 @@
   injectCss();
   ensurePanel();
 
-  const originalRenderAll = renderAll;
-  renderAll = function maintenanceRenderAll() {
-    originalRenderAll();
-    renderPanel();
-  };
+  Runtime.on("render:after", renderPanel, { id: "maintenance.recovery", priority: -5 });
 
   document.addEventListener("click", (event) => {
     if (event.target.closest("#rollback-latest-report")) rollbackLatest();
@@ -222,11 +203,11 @@
     else if (event.target.closest("#discard-rollback")) discardRecovery();
   });
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !state.profile) return;
+  Storage.subscribe((changes) => {
+    if (!state.profile) return;
     const historyKey = profileKeys(state.profile).history;
     if (changes[historyKey] && !changes[historyKey].newValue) {
-      chrome.storage.local.remove(recoveryKey(state.profile));
+      Storage.remove(recoveryKey(state.profile)).catch(() => {});
     }
   });
 

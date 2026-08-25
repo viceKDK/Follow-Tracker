@@ -13,8 +13,10 @@
     "dashboard-maintenance.js",
     "dashboard-backup.js",
     "dashboard-identity.js",
+    "admin-core.js",
     "dashboard-admin.js",
     "dashboard-integrity.js",
+    "dashboard-guidance.js",
   ];
 
   function loadAt(index) {

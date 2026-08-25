@@ -39,6 +39,7 @@
       "js": [
         "core.js",
         "trust-core.js",
+        "platform-storage.js",
         "capture-store.js",
         "instagram-api.js",
         "instagram-ui.js",

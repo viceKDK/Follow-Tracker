@@ -3,20 +3,20 @@
 (function () {
   const Trust = globalThis.FollowTrackerTrust;
   const Product = globalThis.FollowTrackerProductCore;
-  if (!Trust || !Product) throw new Error("Follow Tracker Backup no pudo cargar sus dependencias.");
+  const Runtime = globalThis.FollowTrackerDashboardRuntime;
+  const Storage = globalThis.FollowTrackerStorage;
+  if (!Trust || !Product || !Runtime || !Storage) throw new Error("Follow Tracker Backup no pudo cargar sus dependencias.");
 
-  function storageGet(keys) {
-    return new Promise((resolve) => chrome.storage.local.get(keys, (items) => resolve(items || {})));
-  }
+  const storageGet = Storage.get;
+  const storageSet = Storage.set;
 
-  function storageSet(values) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(values, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
+  function ensureImportControls() {
+    const actions = document.querySelector(".top-actions");
+    if (!actions || document.querySelector("#import-backup")) return;
+    actions.insertAdjacentHTML(
+      "afterbegin",
+      `<button id="import-backup" class="button button-ghost" type="button">Importar backup</button><input id="import-backup-input" type="file" accept="application/json,.json" hidden />`
+    );
   }
 
   function toast(message, tone = "success") {
@@ -207,13 +207,14 @@
     }, 500);
   }
 
-  const originalRenderAll = renderAll;
-  renderAll = function backupRenderAll() {
-    originalRenderAll();
-    renderReminder();
-  };
+  ensureImportControls();
+  Runtime.on("render:after", renderReminder, { id: "backup.reminder", priority: -5 });
 
   document.addEventListener("click", (event) => {
+    if (event.target.closest("#import-backup")) {
+      document.querySelector("#import-backup-input")?.click();
+      return;
+    }
     const exportButton = event.target.closest('[data-export="json"]');
     if (exportButton) {
       event.preventDefault();
@@ -246,7 +247,10 @@
       .finally(() => { event.target.value = ""; });
   }, true);
 
-  setTimeout(renderReminder, 0);
+  setTimeout(() => {
+    ensureImportControls();
+    renderReminder();
+  }, 0);
 
   globalThis.FollowTrackerBackup = {
     exportAllProfiles,

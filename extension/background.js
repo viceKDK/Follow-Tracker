@@ -5,6 +5,7 @@ const TIMELINE_PREFIX = "ft_timeline_";
 const CONTENT_FILES = [
   "core.js",
   "trust-core.js",
+  "platform-storage.js",
   "capture-store.js",
   "instagram-api.js",
   "instagram-ui.js",

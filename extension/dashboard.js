@@ -2,6 +2,13 @@
 
 const Core = globalThis.FollowTrackerCore;
 const History = globalThis.FollowTrackerHistory;
+const Runtime = globalThis.FollowTrackerDashboardRuntime;
+const Storage = globalThis.FollowTrackerStorage;
+const Relationship = globalThis.FollowTrackerRelationshipCore;
+
+if (!Core || !History || !Runtime || !Storage || !Relationship) {
+  throw new Error("Follow Tracker Dashboard no pudo cargar sus dependencias base.");
+}
 
 const state = {
   storage: {},
@@ -27,27 +34,14 @@ const eventMeta = {
   you_unfollowed: { symbol: "←", tone: "negative", title: "lo dejaste de seguir" },
 };
 
-const relationshipStateLabels = {
-  current: {
-    mutual: "Se siguen",
-    follows_you: "Te sigue; no lo seguís",
-    you_follow: "Lo seguís; no te sigue",
-    none: "No se siguen",
-  },
-  previous: {
-    mutual: "Se seguían",
-    follows_you: "Te seguía; no lo seguías",
-    you_follow: "Lo seguías; no te seguía",
-    none: "No se seguían",
-  },
-};
+const relationshipStateLabels = Relationship.STATE_LABELS;
 
 function storageGetAll() {
-  return new Promise((resolve) => chrome.storage.local.get(null, (items) => resolve(items || {})));
+  return Storage.getAll();
 }
 
 function storageRemove(keys) {
-  return new Promise((resolve) => chrome.storage.local.remove(keys, resolve));
+  return Storage.remove(keys);
 }
 
 function formatNumber(value) {
@@ -107,9 +101,7 @@ function detectProfiles(items) {
 }
 
 function validView(value) {
-  return ["overview", "relationships", "people", "activity"].includes(value)
-    ? value
-    : "overview";
+  return Runtime.resolveView(value, "overview");
 }
 
 function activateView(view, updateHash = true) {
@@ -132,6 +124,8 @@ function activateView(view, updateHash = true) {
     url.hash = state.view;
     history.replaceState({}, "", url);
   }
+
+  Runtime.emitSync("view:changed", { state, view: state.view });
 }
 
 function showEmpty() {
@@ -407,209 +401,16 @@ function reportOption(report) {
   return `<option value="${escapeHtml(report.id)}">${escapeHtml(label)}</option>`;
 }
 
-function relationshipState(username, followers, following) {
-  const followsYou = followers.has(username);
-  const youFollow = following.has(username);
-
-  if (followsYou && youFollow) return "mutual";
-  if (followsYou) return "follows_you";
-  if (youFollow) return "you_follow";
-  return "none";
-}
-
-function normalizeUsernameMap() {
-  const map = new Map();
-
-  Array.from(arguments).forEach((rows) => {
-    (rows || []).forEach((value) => {
-      const username =
-        typeof value === "string"
-          ? value.trim()
-          : value && typeof value.username === "string"
-            ? value.username.trim()
-            : "";
-
-      if (username) map.set(username.toLowerCase(), username);
-    });
-  });
-
-  return map;
-}
-
-function transitionHeadline(item) {
-  const followedYouNow = !item.fromFollowsYou && item.toFollowsYou;
-  const unfollowedYou = item.fromFollowsYou && !item.toFollowsYou;
-  const youFollowNow = !item.fromYouFollow && item.toYouFollow;
-  const youUnfollowed = item.fromYouFollow && !item.toYouFollow;
-
-  if (unfollowedYou && youUnfollowed) {
-    return "Se dejaron de seguir";
-  }
-
-  if (followedYouNow && youFollowNow) {
-    return "Se siguen ahora";
-  }
-
-  if (unfollowedYou && youFollowNow) {
-    return "Te dejó de seguir y ahora lo seguís";
-  }
-
-  if (followedYouNow && youUnfollowed) {
-    return "Te sigue ahora, pero vos lo dejaste de seguir";
-  }
-
-  if (unfollowedYou) {
-    return item.toYouFollow
-      ? "Te dejó de seguir; vos todavía lo seguís"
-      : "Te dejó de seguir";
-  }
-
-  if (followedYouNow) {
-    return item.toYouFollow
-      ? "Te sigue ahora; se siguen"
-      : "Te sigue ahora; vos no lo seguís";
-  }
-
-  if (youUnfollowed) {
-    return item.toFollowsYou
-      ? "Lo dejaste de seguir; todavía te sigue"
-      : "Lo dejaste de seguir";
-  }
-
-  if (youFollowNow) {
-    return item.toFollowsYou
-      ? "Lo seguís ahora; se siguen"
-      : "Lo seguís ahora; no te sigue";
-  }
-
-  return relationshipStateLabels.current[item.toState];
-}
-
-function transitionTone(item) {
-  if (item.fromFollowsYou && !item.toFollowsYou) return "negative";
-  if (!item.fromFollowsYou && item.toFollowsYou) return "positive";
-  if (!item.fromYouFollow && item.toYouFollow) return "info";
-  if (item.fromYouFollow && !item.toYouFollow) return "warning";
-  return "neutral";
-}
-
-function transitionPriority(item) {
-  if (item.fromFollowsYou && !item.toFollowsYou) return 0;
-  if (!item.fromFollowsYou && item.toFollowsYou) return 1;
-  if (item.fromYouFollow && !item.toYouFollow) return 2;
-  if (!item.fromYouFollow && item.toYouFollow) return 3;
-  if (item.toState === "you_follow") return 4;
-  if (item.toState === "follows_you") return 5;
-  if (item.toState === "mutual") return 6;
-  return 7;
-}
-
 function buildRelationshipTransitions(comparison) {
-  const names = normalizeUsernameMap(
-    comparison.fromSnapshot.followers,
-    comparison.fromSnapshot.following,
-    comparison.toSnapshot.followers,
-    comparison.toSnapshot.following
-  );
-
-  const fromFollowers = new Set(
-    (comparison.fromSnapshot.followers || []).map((value) =>
-      String(value).toLowerCase()
-    )
-  );
-  const fromFollowing = new Set(
-    (comparison.fromSnapshot.following || []).map((value) =>
-      String(value).toLowerCase()
-    )
-  );
-  const toFollowers = new Set(
-    (comparison.toSnapshot.followers || []).map((value) =>
-      String(value).toLowerCase()
-    )
-  );
-  const toFollowing = new Set(
-    (comparison.toSnapshot.following || []).map((value) =>
-      String(value).toLowerCase()
-    )
-  );
-
-  return [...names.entries()]
-    .map(([normalized, display]) => {
-      const fromState = relationshipState(
-        normalized,
-        fromFollowers,
-        fromFollowing
-      );
-      const toState = relationshipState(
-        normalized,
-        toFollowers,
-        toFollowing
-      );
-
-      const item = {
-        username: display,
-        normalized,
-        fromState,
-        toState,
-        fromFollowsYou: fromFollowers.has(normalized),
-        fromYouFollow: fromFollowing.has(normalized),
-        toFollowsYou: toFollowers.has(normalized),
-        toYouFollow: toFollowing.has(normalized),
-        changed: fromState !== toState,
-      };
-
-      item.headline = transitionHeadline(item);
-      item.tone = transitionTone(item);
-      return item;
-    })
-    .sort(
-      (a, b) =>
-        Number(b.changed) - Number(a.changed) ||
-        transitionPriority(a) - transitionPriority(b) ||
-        a.normalized.localeCompare(b.normalized)
-    );
+  return Relationship.buildTransitions(comparison);
 }
 
 function relationshipMatchesFilter(item) {
-  switch (state.relationshipFilter) {
-    case "changed":
-      return item.changed;
-    case "followed-you":
-      return !item.fromFollowsYou && item.toFollowsYou;
-    case "unfollowed-you":
-      return item.fromFollowsYou && !item.toFollowsYou;
-    case "you-follow":
-      return item.toState === "you_follow";
-    case "follows-you":
-      return item.toState === "follows_you";
-    case "mutual":
-      return item.toState === "mutual";
-    case "all":
-    default:
-      return true;
-  }
+  return Relationship.matchesFilter(item, state.relationshipFilter);
 }
 
 function relationshipFilterCount(filter) {
-  return state.relationshipTransitions.filter((item) => {
-    switch (filter) {
-      case "changed":
-        return item.changed;
-      case "followed-you":
-        return !item.fromFollowsYou && item.toFollowsYou;
-      case "unfollowed-you":
-        return item.fromFollowsYou && !item.toFollowsYou;
-      case "you-follow":
-        return item.toState === "you_follow";
-      case "follows-you":
-        return item.toState === "follows_you";
-      case "mutual":
-        return item.toState === "mutual";
-      case "all":
-      default:
-        return true;
-    }
-  }).length;
+  return Relationship.filterCount(state.relationshipTransitions, filter);
 }
 
 function updateRelationshipFilterCounts() {
@@ -620,7 +421,7 @@ function updateRelationshipFilterCounts() {
   });
 }
 
-function renderRelationshipList() {
+function renderRelationshipCards() {
   const target = document.querySelector("#relationship-list");
   const query = state.relationshipQuery
     .trim()
@@ -675,6 +476,10 @@ function renderRelationshipList() {
         </article>`;
     })
     .join("");
+}
+
+function renderRelationshipList() {
+  return Runtime.render("relationships", renderRelationshipCards);
 }
 
 function normalizeComparisonOrder(reports) {
@@ -784,11 +589,12 @@ function renderReportComparison() {
   );
 
   state.relationshipTransitions = buildRelationshipTransitions(comparison);
+  Runtime.emitSync("comparison:updated", { comparison, state });
   updateRelationshipFilterCounts();
   renderRelationshipList();
 }
 
-function renderActivity() {
+function renderActivityCards() {
   const events = [...state.timeline.events].sort(
     (a, b) => new Date(b.occurredAt) - new Date(a.occurredAt)
   );
@@ -831,6 +637,10 @@ function renderActivity() {
     .join("");
 }
 
+function renderActivity() {
+  return Runtime.render("activity", renderActivityCards);
+}
+
 function relationshipLabel(person) {
   return {
     mutual: "Se siguen",
@@ -852,10 +662,11 @@ function matchesFilter(person) {
   if (state.filter === "historical") {
     return person.relationship === "historical";
   }
-  return true;
+  const extensionResult = Runtime.matchFilter("people", state.filter, person, { state });
+  return extensionResult === undefined ? true : extensionResult;
 }
 
-function renderPeople() {
+function renderPeopleCards() {
   const query = state.query.trim().toLowerCase().replace(/^@/, "");
   const people = state.people.filter(
     (person) =>
@@ -922,6 +733,10 @@ function renderPeople() {
   });
 }
 
+function renderPeople() {
+  return Runtime.render("people", renderPeopleCards);
+}
+
 function eventLabel(type) {
   return eventMeta[type] ? eventMeta[type].title : "Cambio detectado";
 }
@@ -966,12 +781,14 @@ function openPersonDialog(username) {
 }
 
 function renderAll() {
+  Runtime.emitSync("render:before", { state });
   renderOverview();
   renderChart();
   renderLatestChanges();
   renderReportComparison();
   renderPeople();
   renderActivity();
+  Runtime.emitSync("render:after", { state });
 }
 
 async function loadProfile(profile) {
@@ -992,6 +809,8 @@ async function loadProfile(profile) {
   state.compareTo = null;
   state.relationshipFilter = "changed";
   state.relationshipQuery = "";
+
+  Runtime.emitSync("profile:loaded", { profile: state.profile, state });
 
   fillProfileSelect();
   document.querySelector("#empty-state").hidden = true;
@@ -1021,6 +840,7 @@ async function initialize() {
   state.storage = await storageGetAll();
   state.profiles = detectProfiles(state.storage);
   state.view = validView(location.hash.replace(/^#/, "") || state.view);
+  Runtime.emitSync("initialized", { state });
 
   if (!state.profiles.length) {
     state.profile = null;

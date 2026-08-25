@@ -2,7 +2,8 @@
 
 (function () {
   const Product = globalThis.FollowTrackerProductCore;
-  if (!Product) throw new Error("Follow Tracker Product Core no fue cargado.");
+  const Runtime = globalThis.FollowTrackerDashboardRuntime;
+  if (!Product || !Runtime) throw new Error("Follow Tracker Product no pudo cargar sus dependencias.");
 
   const activity = {
     query: "",
@@ -25,20 +26,6 @@
     document.head.append(link);
   }
 
-  function storageGet(keys) {
-    return new Promise((resolve) => chrome.storage.local.get(keys, (items) => resolve(items || {})));
-  }
-
-  function storageSet(values) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(values, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
-
   function showToast(message, tone = "success") {
     let target = document.querySelector("#product-toast");
     if (!target) {
@@ -57,15 +44,6 @@
       target.classList.remove("visible");
       setTimeout(() => { target.hidden = true; }, 180);
     }, 5200);
-  }
-
-  function ensureImportControls() {
-    const actions = document.querySelector(".top-actions");
-    if (!actions || document.querySelector("#import-backup")) return;
-    actions.insertAdjacentHTML(
-      "afterbegin",
-      `<button id="import-backup" class="button button-ghost" type="button">Importar backup</button><input id="import-backup-input" type="file" accept="application/json,.json" hidden />`
-    );
   }
 
   function ensureHealthPanel() {
@@ -266,57 +244,6 @@
     renderActivityEnhanced();
   }
 
-  async function importBackup(file) {
-    if (!file) return;
-    if (file.size > 100 * 1024 * 1024) {
-      showToast("El backup supera 100 MB. Dividilo o revisá que sea el archivo correcto.", "error");
-      return;
-    }
-
-    let parsed;
-    try {
-      parsed = JSON.parse(await file.text());
-    } catch (_error) {
-      showToast("No se pudo leer el JSON del backup.", "error");
-      return;
-    }
-
-    const validation = Product.validateBackupPayload(parsed);
-    if (!validation.ok) {
-      showToast(validation.errors[0] || "El backup no es válido.", "error");
-      return;
-    }
-
-    const snapshot = History.normalizeSnapshot(validation.snapshot);
-    if (!snapshot) {
-      showToast("No se pudo normalizar la captura del backup.", "error");
-      return;
-    }
-
-    let timeline = validation.timeline
-      ? History.normalizeTimeline(validation.timeline, snapshot.profile)
-      : History.appendSnapshot(null, null, snapshot);
-    if (!timeline.reports.length) timeline = History.appendSnapshot(timeline, null, snapshot);
-
-    const keys = profileKeys(snapshot.profile);
-    const existing = await storageGet([keys.history, keys.timeline]);
-    if ((existing[keys.history] || existing[keys.timeline]) && !confirm(`Ya existe historial para @${snapshot.profile}. ¿Reemplazarlo por este backup?`)) {
-      showToast("Importación cancelada.", "warning");
-      return;
-    }
-
-    try {
-      await storageSet({ [keys.history]: snapshot, [keys.timeline]: timeline });
-      const warning = validation.warnings.length ? ` ${validation.warnings[0]}` : "";
-      showToast(`Backup de @${snapshot.profile} importado.${warning}`, validation.warnings.length ? "warning" : "success");
-      setTimeout(() => {
-        location.href = `dashboard.html?profile=${encodeURIComponent(snapshot.profile)}#overview`;
-      }, 500);
-    } catch (error) {
-      showToast(`No se pudo guardar el backup: ${error.message}`, "error");
-    }
-  }
-
   function exportHealth() {
     const panel = document.querySelector("#data-health-panel");
     if (!panel || !panel.dataset.health || !state.profile) return;
@@ -330,23 +257,14 @@
   }
 
   injectCss();
-  ensureImportControls();
   ensureHealthPanel();
   ensureActivityControls();
 
-  renderActivity = renderActivityEnhanced;
-  const originalRenderAll = renderAll;
-  renderAll = function productRenderAll() {
-    originalRenderAll();
-    renderHealth();
-  };
+  Runtime.registerRenderer("activity", renderActivityEnhanced, { id: "product.activity", priority: 100 });
+  Runtime.on("render:after", renderHealth, { id: "product.health" });
 
   document.addEventListener("click", (event) => {
     const target = event.target;
-    if (target.closest("#import-backup")) {
-      document.querySelector("#import-backup-input")?.click();
-      return;
-    }
     if (target.closest("#clear-activity")) {
       resetActivityFilters();
       return;
@@ -369,13 +287,6 @@
   });
 
   document.addEventListener("change", (event) => {
-    if (event.target.id === "import-backup-input") {
-      const file = event.target.files && event.target.files[0];
-      importBackup(file).finally(() => {
-        event.target.value = "";
-      });
-      return;
-    }
     if (event.target.id === "activity-type") activity.type = event.target.value;
     else if (event.target.id === "activity-report") activity.reportId = event.target.value;
     else if (event.target.id === "activity-from") activity.from = event.target.value;
@@ -415,7 +326,6 @@
   });
 
   setTimeout(() => {
-    ensureImportControls();
     ensureHealthPanel();
     ensureActivityControls();
     if (state.snapshot && state.timeline) {

@@ -5,43 +5,20 @@
   const trust = root && root.FollowTrackerTrust
     ? root.FollowTrackerTrust
     : (typeof module === "object" && module.exports ? require("./trust-core.js") : null);
-  const api = factory(core, trust);
+  const storage = root && root.FollowTrackerStorage
+    ? root.FollowTrackerStorage
+    : (typeof module === "object" && module.exports ? require("./platform-storage.js") : null);
+  const api = factory(core, trust, storage);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.FollowTrackerCaptureStore = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function (Core, Trust) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (Core, Trust, Storage) {
   "use strict";
 
-  if (!Core || !Trust) throw new Error("Follow Tracker Capture Store no pudo cargar sus dependencias.");
+  if (!Core || !Trust || !Storage) throw new Error("Follow Tracker Capture Store no pudo cargar sus dependencias.");
 
-  function storageGet(keys) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get(keys, (items) => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve(items || {});
-      });
-    });
-  }
-
-  function storageSet(values) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(values, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
-
-  function storageRemove(keys) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.remove(Array.isArray(keys) ? keys : [keys], () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
+  const storageGet = Storage.get;
+  const storageSet = Storage.set;
+  const storageRemove = Storage.remove;
 
   function makeStageId(profile, capturedAt) {
     const stamp = String(capturedAt || new Date().toISOString()).replace(/[^0-9]/g, "").slice(0, 17);

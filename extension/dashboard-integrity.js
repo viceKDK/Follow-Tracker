@@ -3,17 +3,10 @@
 (function () {
   const Trust = globalThis.FollowTrackerTrust;
   const IdentityUi = globalThis.FollowTrackerIdentityUi;
-  if (!Trust) throw new Error("Follow Tracker Dashboard Integrity no pudo cargar Trust Core.");
+  const Storage = globalThis.FollowTrackerStorage;
+  if (!Trust || !Storage) throw new Error("Follow Tracker Dashboard Integrity no pudo cargar sus dependencias.");
 
-  function storageRemove(keys) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.remove(keys, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
+  const storageRemove = Storage.remove;
 
   function officialPhases(files) {
     const names = [...(files || [])].map((file) => String(file.name || "").toLowerCase());

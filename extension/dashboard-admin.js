@@ -4,35 +4,26 @@
   const Trust = globalThis.FollowTrackerTrust;
   const CaptureStore = globalThis.FollowTrackerCaptureStore;
   const Backup = globalThis.FollowTrackerBackup;
-  if (!Trust || !CaptureStore) throw new Error("Follow Tracker Admin no pudo cargar sus dependencias.");
+  const AdminCore = globalThis.FollowTrackerAdminCore;
+  const Runtime = globalThis.FollowTrackerDashboardRuntime;
+  const Storage = globalThis.FollowTrackerStorage;
+  if (!Trust || !CaptureStore || !AdminCore || !Runtime || !Storage) throw new Error("Follow Tracker Admin no pudo cargar sus dependencias.");
 
   let adminProfile = state.profile || "";
   let exportParts = [];
   let adminStorage = {};
 
-  function storageGet(keys) {
-    return new Promise((resolve) => chrome.storage.local.get(keys, (items) => resolve(items || {})));
-  }
-
-  function storageSet(values) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(values, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
-
-  function storageRemove(keys) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.remove(keys, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
+  const storageGet = Storage.get;
+  const storageSet = Storage.set;
+  const storageRemove = Storage.remove;
+  const {
+    formatBytes,
+    profileBytes,
+    profilesFromStorage,
+    rebuildCombinedTimeline,
+    replaceUsername,
+    snapshotsForTimeline,
+  } = AdminCore;
 
   function setAdminStatus(message, tone = "") {
     const target = document.querySelector("#admin-status");
@@ -119,30 +110,7 @@
       </section>`);
   }
 
-  const originalValidView = validView;
-  validView = function adminValidView(value) {
-    return value === "admin" ? "admin" : originalValidView(value);
-  };
-
-  function profilesFromStorage(items) {
-    return Object.keys(items || {})
-      .filter((key) => key.startsWith("ft_history_") && items[key])
-      .map((key) => Trust.safeProfile(items[key].profile || key.slice("ft_history_".length)))
-      .filter((profile, index, list) => list.indexOf(profile) === index)
-      .sort();
-  }
-
-  function profileBytes(profile, items) {
-    const keys = Trust.storageKeys(profile);
-    return Object.values(keys).reduce((total, key) => total + Trust.estimateBytes(items[key]), 0);
-  }
-
-  function formatBytes(value) {
-    const bytes = Number(value) || 0;
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
-    return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
-  }
+  Runtime.registerView("admin");
 
   function optionList(profiles, selected) {
     return profiles.map((profile) => `<option value="${escapeHtml(profile)}"${profile === selected ? " selected" : ""}>@${escapeHtml(profile)}</option>`).join("");
@@ -326,36 +294,6 @@
     setTimeout(() => location.reload(), 450);
   }
 
-  function snapshotsForTimeline(profile, timeline) {
-    const normalized = History.normalizeTimeline(timeline, profile);
-    return normalized.reports.map((report) => ({
-      report,
-      snapshot: History.snapshotForReport(normalized, report.id),
-    })).filter((entry) => entry.snapshot);
-  }
-
-  function rebuildCombinedTimeline(targetProfile, entries) {
-    let timeline = null;
-    let previous = null;
-    entries.sort((a, b) => new Date(a.report.capturedAt) - new Date(b.report.capturedAt));
-    const seen = new Set();
-    entries.forEach(({ report, snapshot }) => {
-      const id = report.id || report.runId;
-      if (!id || seen.has(id)) return;
-      seen.add(id);
-      const current = {
-        ...snapshot,
-        profile: targetProfile,
-        updatedAt: report.capturedAt,
-        runId: report.runId || id,
-        reportId: id,
-      };
-      timeline = History.appendSnapshot(timeline, previous, current);
-      previous = current;
-    });
-    return { timeline, snapshot: previous };
-  }
-
   async function mergeProfiles() {
     const source = document.querySelector("#merge-profile-source").value;
     const target = document.querySelector("#merge-profile-target").value;
@@ -377,14 +315,11 @@
       reports: { ...(sourceMeta.reports || {}), ...(targetMeta.reports || {}) },
       updatedAt: new Date().toISOString(),
     };
-    const sourcePeople = adminStorage[sourceKeys.peopleMeta] || { people: {} };
-    const targetPeople = adminStorage[targetKeys.peopleMeta] || { people: {} };
-    const peopleMeta = {
-      schemaVersion: 1,
-      profile: target,
-      people: { ...(sourcePeople.people || {}), ...(targetPeople.people || {}) },
-      updatedAt: new Date().toISOString(),
-    };
+    const peopleMeta = AdminCore.mergePeopleMetadata(
+      adminStorage[sourceKeys.peopleMeta],
+      adminStorage[targetKeys.peopleMeta],
+      target
+    );
     let identities = Trust.normalizeIdentityRegistry(adminStorage[targetKeys.identities], target);
     const sourceRegistry = Trust.normalizeIdentityRegistry(adminStorage[sourceKeys.identities], source);
     const sourceRecords = Object.values(sourceRegistry.records).map((record) => ({
@@ -404,10 +339,6 @@
     await storageRemove(Object.values(sourceKeys));
     setAdminStatus(`@${source} se fusionó dentro de @${target}.`);
     setTimeout(() => { location.href = `dashboard.html?profile=${encodeURIComponent(target)}#admin`; }, 500);
-  }
-
-  function replaceUsername(values, from, to) {
-    return [...new Set((values || []).map((value) => Trust.normalizeUsername(value) === from ? to : Trust.normalizeUsername(value)).filter(Boolean))].sort();
   }
 
   async function mergeIdentities() {

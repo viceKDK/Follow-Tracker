@@ -2,7 +2,9 @@
 
 (function () {
   const Trust = globalThis.FollowTrackerTrust;
-  if (!Trust) throw new Error("Follow Tracker Identity no pudo cargar Trust Core.");
+  const Runtime = globalThis.FollowTrackerDashboardRuntime;
+  const Storage = globalThis.FollowTrackerStorage;
+  if (!Trust || !Runtime || !Storage) throw new Error("Follow Tracker Identity no pudo cargar sus dependencias.");
 
   let registry = Trust.emptyIdentityRegistry("");
   let peopleMeta = { schemaVersion: 1, profile: "", people: {} };
@@ -11,15 +13,7 @@
   let observer = null;
   let decorationScheduled = false;
 
-  function storageSet(values) {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(values, () => {
-        const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message));
-        else resolve();
-      });
-    });
-  }
+  const storageSet = Storage.set;
 
   function normalizePeopleMeta(value, profile) {
     const input = value && typeof value === "object" ? value : {};
@@ -274,29 +268,16 @@
     if (state.filter === "watchlist") renderPeople();
   }
 
-  const originalMatchesFilter = matchesFilter;
-  matchesFilter = function identityMatchesFilter(person) {
-    if (state.filter === "watchlist") return metadataFor(person.username).pinned;
-    return originalMatchesFilter(person);
-  };
-
-  const originalLoadProfile = loadProfile;
-  loadProfile = async function identityLoadProfile(profile) {
-    const result = await originalLoadProfile(profile);
-    refreshSidecars();
-    renderQuality();
-    scheduleDecoration();
-    return result;
-  };
-
-  const originalRenderAll = renderAll;
-  renderAll = function identityRenderAll() {
-    refreshSidecars();
-    originalRenderAll();
+  Runtime.registerFilter("people", "watchlist", (person) => metadataFor(person.username).pinned, {
+    id: "identity.watchlist",
+  });
+  Runtime.on("profile:loaded", refreshSidecars, { id: "identity.profile", priority: 100 });
+  Runtime.on("render:before", refreshSidecars, { id: "identity.refresh", priority: 100 });
+  Runtime.on("render:after", () => {
     ensureWatchlistFilter();
     renderQuality();
     scheduleDecoration();
-  };
+  }, { id: "identity.decorate", priority: -10 });
 
   document.addEventListener("click", (event) => {
     const row = event.target.closest(".clickable-table-row[data-user]");

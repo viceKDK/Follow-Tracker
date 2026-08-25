@@ -2,6 +2,8 @@
 
 (function () {
   const Product = globalThis.FollowTrackerProductCore;
+  const Runtime = globalThis.FollowTrackerDashboardRuntime;
+  if (!Product || !Runtime) throw new Error("Follow Tracker UX no pudo cargar sus dependencias.");
   const ux = {
     relSort: ["priority", "asc"],
     relState: "all",
@@ -436,20 +438,18 @@
   injectCss();
   ensureControls();
   ensureDrawer();
-  renderRelationshipList = renderRelationshipTable;
-  renderPeople = renderPeopleTable;
+  Runtime.registerRenderer("relationships", renderRelationshipTable, { id: "ux.relationships", priority: 100 });
+  Runtime.registerRenderer("people", renderPeopleTable, { id: "ux.people", priority: 100 });
+  Runtime.on("comparison:updated", resetRelationshipPage, { id: "ux.comparison" });
+  Runtime.on("profile:loaded", () => {
+    resetRelationshipPage();
+    resetPeoplePage();
+  }, { id: "ux.profile" });
 
   if (!location.hash) {
     state.view = "relationships";
     activateView("relationships", false);
   }
-
-  const originalComparisonRender = renderReportComparison;
-  renderReportComparison = function enhancedComparisonRender() {
-    originalComparisonRender();
-    resetRelationshipPage();
-    renderRelationshipTable();
-  };
 
   document.addEventListener("click", (event) => {
     const target = event.target;
