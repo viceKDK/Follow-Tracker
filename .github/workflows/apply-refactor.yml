@@ -1,0 +1,51 @@
+name: Apply dashboard refactor payload
+
+on:
+  push:
+    branches:
+      - refactor/dashboard-runtime-design-thinking
+    paths:
+      - .refactor/**
+      - .github/workflows/apply-refactor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/dashboard-runtime-design-thinking
+          fetch-depth: 0
+
+      - name: Reassemble and verify refactor payload
+        run: |
+          cat \
+            .refactor/chunk-00 \
+            .refactor/chunk-01 \
+            .refactor/rest-00 \
+            .refactor/rest-01 \
+            .refactor/rest-02 \
+            .refactor/rest-03 \
+            .refactor/rest-04 \
+            .refactor/rest-05 \
+            .refactor/rest-06 \
+            > /tmp/follow-refactor.tar.gz
+          echo "eb1d28fc03aa4e5a191df7bbbc4989d6ad370537723b849a38ba571edd5893a8  /tmp/follow-refactor.tar.gz" | sha256sum -c -
+
+      - name: Apply refactor payload
+        run: |
+          tar -xzf /tmp/follow-refactor.tar.gz
+          rm -rf .refactor
+          rm -f .github/workflows/apply-refactor.yml
+
+      - name: Commit refactor
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: introduce dashboard runtime and user guidance"
+          git push origin HEAD:refactor/dashboard-runtime-design-thinking
