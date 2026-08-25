@@ -30,7 +30,10 @@ jobs:
             .refactor/rest-01 \
             .refactor/rest-02 \
             .refactor/rest-03 \
-            .refactor/rest-04 \
+            .refactor/rest04-part-00 \
+            .refactor/rest04-part-01 \
+            .refactor/rest04-part-02 \
+            .refactor/rest04-part-03 \
             .refactor/rest-05 \
             .refactor/rest-06 \
             > /tmp/follow-refactor.tar.gz
