@@ -42,6 +42,7 @@ jobs:
       - name: Apply refactor payload
         run: |
           tar -xzf /tmp/follow-refactor.tar.gz
+          chmod -R u+rwX,go+rX .
           rm -rf .refactor
           rm -f .github/workflows/apply-refactor.yml
 
