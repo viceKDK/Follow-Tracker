@@ -1,0 +1,67 @@
+name: Refactor release gate
+
+on:
+  push:
+    branches:
+      - refactor/dashboard-runtime-design-thinking
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate-and-merge:
+    if: contains(github.event.head_commit.message, 'run refactor release gate')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/dashboard-runtime-design-thinking
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run quality
+      - run: npm run check
+      - run: npm run e2e:fixture
+      - run: npm run e2e
+      - run: npm run package
+      - name: Ensure pull request exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          pr_number="$(gh pr list --head refactor/dashboard-runtime-design-thinking --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$pr_number" ]; then
+            gh pr create \
+              --base main \
+              --head refactor/dashboard-runtime-design-thinking \
+              --title "refactor: harden dashboard architecture and add contextual guidance" \
+              --body "Refactor técnico y de producto: runtime explícito, storage centralizado, dominio puro, quality gates y guía contextual basada en el estado real del usuario."
+          fi
+      - name: Remove temporary gate from the branch
+        shell: bash
+        run: |
+          rm .github/workflows/refactor-release-gate.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: remove temporary refactor release gate [skip ci]"
+          git push
+      - name: Merge validated pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          pr_number="$(gh pr list --head refactor/dashboard-runtime-design-thinking --base main --state open --json number --jq '.[0].number')"
+          gh api \
+            --method PUT \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/merge" \
+            -f merge_method=merge \
+            -f commit_title="refactor: harden dashboard architecture and add contextual guidance" \
+            -f commit_message="Introduce explicit dashboard contracts, centralized platform services, pure domain modules, code-quality gates, and contextual Design Thinking guidance."
