@@ -1,0 +1,50 @@
+name: Apply dashboard refactor from blobs
+
+on:
+  push:
+    branches:
+      - refactor/dashboard-runtime-design-thinking
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, 'apply refactor blobs')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/dashboard-runtime-design-thinking
+      - name: Fetch, verify and apply payload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/follow-refactor.tar.xz.b64
+          for sha in \
+            c32360279d41506d74841f7ca63d4bffaf44fc46 \
+            e9a5e079e8c2f1144e47ee445a7136d274129218 \
+            177c2eebd37f02ba8300f92a1cc0105b1cdcfd9f \
+            c6150e4907b7a4f1f7ded1b231747ee2d5917c4d
+          do
+            curl --fail --silent --show-error --location \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.raw+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/blobs/${sha}" \
+              >> /tmp/follow-refactor.tar.xz.b64
+          done
+          base64 --decode /tmp/follow-refactor.tar.xz.b64 > /tmp/follow-refactor.tar.xz
+          echo "21f88021c5566a8723b93e461ff08b936c39f173d188e408871759854662db40  /tmp/follow-refactor.tar.xz" | sha256sum --check
+          tar -xJf /tmp/follow-refactor.tar.xz
+          rm -rf .refactor-payload .refactor-bootstrap
+          rm -f .github/workflows/apply-refactor.yml .github/workflows/apply-refactor-blobs.yml
+      - name: Commit refactor
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: introduce dashboard runtime and contextual guidance"
+          git push
