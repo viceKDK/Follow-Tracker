@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Follow Tracker — Dashboard</title>
+    <link rel="icon" type="image/png" href="icons/icon-32.png" />
+    <link rel="stylesheet" href="design-tokens.css" />
+    <link rel="stylesheet" href="dashboard.css" />
+    <link rel="stylesheet" href="dashboard-table.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="dashboard.html" aria-label="Inicio de Follow Tracker">
+          <span class="brand-mark" aria-hidden="true"><img src="icons/follow-tracker-favicon-fox.png" alt="" /></span>
+          <span>
+            <strong>Follow Tracker</strong>
+          </span>
+        </a>
+
+        <nav class="main-nav" aria-label="Secciones del dashboard" role="tablist">
+          <button class="nav-item active" data-view="overview" type="button" role="tab" aria-selected="true">
+            <span aria-hidden="true">⌂</span> Resumen
+          </button>
+          <button class="nav-item" data-view="relationships" type="button" role="tab" aria-selected="false">
+            <span aria-hidden="true">⇆</span> Antes y ahora
+          </button>
+          <button class="nav-item" data-view="people" type="button" role="tab" aria-selected="false">
+            <span aria-hidden="true">◎</span> Personas
+          </button>
+          <button class="nav-item" data-view="activity" type="button" role="tab" aria-selected="false">
+            <span aria-hidden="true">↯</span> Actividad
+          </button>
+        </nav>
+
+      </aside>
+
+      <div class="page">
+        <header class="topbar">
+          <div class="profile-control">
+            <label for="profile-select">Perfil analizado</label>
+            <select id="profile-select" aria-label="Seleccionar perfil"></select>
+          </div>
+
+          <div class="top-actions">
+            <button id="analyze-profile" class="button button-ghost" type="button">Abrir en Instagram</button>
+            <div class="export-wrap">
+              <button id="export-toggle" class="button button-secondary" type="button" aria-expanded="false">
+                Exportar <span aria-hidden="true">⌄</span>
+              </button>
+              <div id="export-menu" class="export-menu" hidden>
+                <button data-export="json" type="button">
+                  <strong>Backup JSON</strong>
+                  <small>Captura e historial completo</small>
+                </button>
+                <button data-export="events" type="button">
+                  <strong>Actividad CSV</strong>
+                  <small>Persona, evento, fecha y reporte</small>
+                </button>
+                <button data-export="relationships" type="button">
+                  <strong>Relaciones CSV</strong>
+                  <small>Estado actual de cada usuario</small>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main>
+          <section id="empty-state" class="empty-state" hidden>
+            <div class="empty-visual"><span aria-hidden="true">⇆</span></div>
+            <p class="eyebrow">PRIMERA CAPTURA</p>
+            <h1>Todavía no hay reportes para comparar</h1>
+            <p>Abre un perfil de Instagram y realiza el primer análisis. Esa captura será la referencia para saber qué cambió en los siguientes reportes.</p>
+            <button id="empty-open-instagram" class="button button-primary" type="button">Abrir Instagram</button>
+          </section>
+
+          <div id="dashboard-content" hidden>
+            <section id="overview" class="view-panel active" data-view-panel="overview" role="tabpanel">
+              <div class="hero">
+                <div>
+                  <p class="eyebrow">ESTADO ACTUAL</p>
+                  <h1 id="hero-title">Relaciones de @perfil</h1>
+                  <p id="hero-subtitle" class="hero-subtitle">Cargando historial...</p>
+                </div>
+                <div class="hero-status">
+                  <span class="status-dot"></span>
+                  <div>
+                    <small>Último reporte</small>
+                    <strong id="last-report-id">—</strong>
+                  </div>
+                </div>
+              </div>
+
+              <section class="kpi-grid" aria-label="Estado actual de seguidores y seguidos">
+                <article class="kpi-card kpi-blue">
+                  <span class="kpi-icon">↓</span>
+                  <p>Te siguen</p>
+                  <strong id="kpi-followers">0</strong>
+                  <small id="delta-followers">Sin cambios</small>
+                </article>
+                <article class="kpi-card kpi-cyan">
+                  <span class="kpi-icon">↑</span>
+                  <p>Los seguís</p>
+                  <strong id="kpi-following">0</strong>
+                  <small id="delta-following">Sin cambios</small>
+                </article>
+                <article class="kpi-card kpi-green">
+                  <span class="kpi-icon">⇄</span>
+                  <p>Se siguen</p>
+                  <strong id="kpi-mutual">0</strong>
+                  <small>Ambos se siguen ahora</small>
+                </article>
+                <article class="kpi-card kpi-amber">
+                  <span class="kpi-icon">←</span>
+                  <p>Solo te siguen</p>
+                  <strong id="kpi-follower-only">0</strong>
+                  <small>Te siguen, pero vos no los seguís</small>
+                </article>
+                <article class="kpi-card kpi-orange">
+                  <span class="kpi-icon">→</span>
+                  <p>Solo los seguís</p>
+                  <strong id="kpi-following-only">0</strong>
+                  <small>Vos los seguís, pero ellos no te siguen</small>
+                </article>
+                <article class="kpi-card kpi-red">
+                  <span class="kpi-icon">−</span>
+                  <p>Te dejaron de seguir</p>
+                  <strong id="kpi-lost">0</strong>
+                  <small>Desde el reporte anterior</small>
+                </article>
+              </section>
+
+              <section class="content-grid chart-grid">
+                <article class="panel chart-panel">
+                  <div class="panel-heading">
+                    <div>
+                      <p class="panel-kicker">EVOLUCIÓN</p>
+                      <h2>Seguidores y seguidos por reporte</h2>
+                    </div>
+                    <div class="chart-header-actions">
+                      <div class="chart-range" role="group" aria-label="Período del gráfico">
+                        <button data-chart-range="30" type="button">30 días</button>
+                        <button data-chart-range="90" type="button">90 días</button>
+                        <button class="active" data-chart-range="all" type="button">Todo</button>
+                      </div>
+                      <div class="legend">
+                      <span class="legend-followers">Te siguen</span>
+                      <span class="legend-following">Los seguís</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="history-chart" class="chart" role="img" aria-label="Evolución de seguidores y seguidos"></div>
+                </article>
+
+                <article class="panel changes-panel">
+                  <div class="panel-heading">
+                    <div>
+                      <p class="panel-kicker">ÚLTIMO REPORTE</p>
+                      <h2>Qué cambió</h2>
+                    </div>
+                    <span id="latest-change-date" class="date-chip">—</span>
+                  </div>
+                  <div id="latest-changes" class="change-groups"></div>
+                </article>
+              </section>
+
+              <section class="danger-zone">
+                <div>
+                  <strong>Administrar historial</strong>
+                  <p>Borra únicamente los reportes del perfil seleccionado. No modifica nada en Instagram.</p>
+                </div>
+                <button id="delete-profile" class="button button-danger" type="button">Borrar historial de este perfil</button>
+              </section>
+            </section>
+
+            <section id="relationships" class="view-panel" data-view-panel="relationships" role="tabpanel" hidden>
+              <div class="section-hero">
+                <div>
+                  <p class="eyebrow">COMPARACIÓN DE RELACIONES</p>
+                  <h1>Antes y ahora</h1>
+              <p>Elegí dos reportes y revisá las personas agrupadas en columnas según su relación actual.</p>
+                </div>
+              </div>
+
+              <article class="panel relationship-panel">
+                <div class="comparison-toolbar">
+                  <div class="compare-controls">
+                    <label>
+                      <span>Reporte anterior</span>
+                      <select id="compare-from" aria-label="Reporte anterior"></select>
+                    </label>
+                    <span class="compare-arrow" aria-hidden="true">→</span>
+                    <label>
+                      <span>Reporte actual</span>
+                      <select id="compare-to" aria-label="Reporte actual"></select>
+                    </label>
+                  </div>
+                  <p id="compare-caption" class="compare-caption">Seleccioná dos reportes.</p>
+                </div>
+
+                <div id="compare-empty" class="compare-empty">Necesitás al menos dos capturas completas para comparar relaciones.</div>
+
+                <div id="compare-content" hidden>
+                  <div class="compare-summary">
+                    <article>
+                      <span>Balance de seguidores</span>
+                      <strong id="compare-followers-delta">0</strong>
+                    </article>
+                    <article>
+                      <span>Balance de seguidos</span>
+                      <strong id="compare-following-delta">0</strong>
+                    </article>
+                    <article>
+                      <span>Cambio en personas que se siguen</span>
+                      <strong id="compare-mutual-delta">0</strong>
+                    </article>
+                  </div>
+
+                  <div class="movement-grid" aria-label="Cambios entre reportes">
+                    <article class="movement-card movement-positive">
+                      <span>Te sigue ahora</span>
+                      <strong id="movement-followed-you">0</strong>
+                      <small>Antes no te seguía</small>
+                    </article>
+                    <article class="movement-card movement-negative">
+                      <span>Te dejó de seguir</span>
+                      <strong id="movement-unfollowed-you">0</strong>
+                      <small>Antes te seguía</small>
+                    </article>
+                    <article class="movement-card movement-info">
+                      <span>Lo seguís ahora</span>
+                      <strong id="movement-you-followed">0</strong>
+                      <small>Antes no lo seguías</small>
+                    </article>
+                    <article class="movement-card movement-warning">
+                      <span>Lo dejaste de seguir</span>
+                      <strong id="movement-you-unfollowed">0</strong>
+                      <small>Antes lo seguías</small>
+                    </article>
+                  </div>
+
+                  <div class="relationship-tools">
+                    <label class="search-box relationship-search">
+                      <span aria-hidden="true">⌕</span>
+                      <input id="relationship-search" type="search" placeholder="Buscar usuario..." autocomplete="off" />
+                    </label>
+
+                    <div id="relationship-filters" class="filter-row relationship-filters" role="group" aria-label="Filtrar comparación">
+                      <button class="filter active" data-relationship-filter="changed" type="button">Cambiaron <span data-filter-count="changed">0</span></button>
+                      <button class="filter" data-relationship-filter="followed-you" type="button">Te sigue ahora <span data-filter-count="followed-you">0</span></button>
+                      <button class="filter" data-relationship-filter="unfollowed-you" type="button">Te dejó de seguir <span data-filter-count="unfollowed-you">0</span></button>
+                      <button class="filter" data-relationship-filter="you-follow" type="button">Solo lo seguís <span data-filter-count="you-follow">0</span></button>
+                      <button class="filter" data-relationship-filter="follows-you" type="button">Solo te sigue <span data-filter-count="follows-you">0</span></button>
+                      <button class="filter" data-relationship-filter="mutual" type="button">Se siguen <span data-filter-count="mutual">0</span></button>
+                      <button class="filter" data-relationship-filter="all" type="button">Todos <span data-filter-count="all">0</span></button>
+                    </div>
+                  </div>
+
+                  <div id="relationship-list" class="relationship-list"></div>
+                </div>
+              </article>
+            </section>
+
+            <section id="people" class="view-panel" data-view-panel="people" role="tabpanel" hidden>
+              <div class="section-hero">
+                <div>
+                  <p class="eyebrow">ESTADO ACTUAL</p>
+                  <h1>Personas</h1>
+                  <p>Buscá una cuenta para ver cómo está la relación ahora y qué cambios se detectaron antes.</p>
+                </div>
+                <span id="people-count" class="count-chip">0 personas</span>
+              </div>
+
+              <article class="panel people-panel">
+                <div class="people-tools">
+                  <label class="search-box">
+                    <span aria-hidden="true">⌕</span>
+                    <input id="people-search" type="search" placeholder="Buscar usuario..." autocomplete="off" />
+                  </label>
+                  <div id="people-filters" class="filter-row" role="group" aria-label="Filtrar personas">
+                    <button class="filter active" data-filter="all" type="button">Todos</button>
+                    <button class="filter" data-filter="unfollowed" type="button">Te dejó de seguir</button>
+                    <button class="filter" data-filter="follows-you" type="button">Solo te sigue</button>
+                    <button class="filter" data-filter="not-following-back" type="button">Solo lo seguís</button>
+                    <button class="filter" data-filter="mutual" type="button">Se siguen</button>
+                    <button class="filter" data-filter="historical" type="button">Ya no se siguen</button>
+                  </div>
+                </div>
+                <div id="people-list" class="people-list"></div>
+              </article>
+            </section>
+
+            <section id="activity" class="view-panel" data-view-panel="activity" role="tabpanel" hidden>
+              <div class="section-hero">
+                <div>
+                  <p class="eyebrow">CAMBIOS DETECTADOS</p>
+                  <h1>Actividad</h1>
+                  <p>La fecha corresponde al reporte que detectó el cambio, no al instante exacto en que ocurrió en Instagram.</p>
+                </div>
+                <span id="event-total" class="count-chip">0 eventos</span>
+              </div>
+
+              <article class="panel activity-panel">
+                <div id="activity-list" class="activity-list"></div>
+              </article>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <dialog id="person-dialog" class="person-dialog">
+      <button id="dialog-close" class="dialog-close" type="button" aria-label="Cerrar">×</button>
+      <p class="eyebrow">HISTORIAL INDIVIDUAL</p>
+      <h2 id="dialog-username">@usuario</h2>
+      <div id="dialog-relationship" class="relationship-summary"></div>
+      <div id="dialog-events" class="dialog-events"></div>
+      <a id="dialog-profile-link" class="button button-primary" href="#" target="_blank" rel="noreferrer">Ver perfil en Instagram</a>
+    </dialog>
+
+    <script src="core.js"></script>
+    <script src="history.js"></script>
+    <script src="platform-storage.js"></script>
+    <script src="dashboard-runtime.js"></script>
+    <script src="relationship-core.js"></script>
+    <script src="product-guidance.js"></script>
+    <script src="dashboard-projection.js"></script>
+    <script src="dashboard.js"></script>
+    <script src="dashboard-table.js"></script>
+  </body>
+</html>

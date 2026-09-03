@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guía visual de instalación — Follow Tracker</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #15203b;
+      --muted: #5f6b85;
+      --line: #dce2ee;
+      --panel: #f6f8fc;
+      --accent: #6558e8;
+      --accent-soft: #efedff;
+      --success: #12805c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #e9edf5;
+      color: var(--ink);
+      font: 16px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { display: grid; gap: 0; justify-content: center; }
+    .shot {
+      display: none;
+      width: 1706px;
+      height: 960px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 0;
+      background: #fff;
+      box-shadow: none;
+    }
+    .shot:target { display: block; }
+    .topbar {
+      height: 74px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 0 28px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcff;
+    }
+    .dots { display: flex; gap: 8px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: #c7cfdd; }
+    .address {
+      flex: 1;
+      padding: 11px 18px;
+      border-radius: 24px;
+      background: #eef1f6;
+      color: #48536b;
+      font-size: 14px;
+    }
+    .content { height: 886px; padding: 54px 72px; }
+    .eyebrow { color: var(--accent); font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 8px 0 8px; font-size: 34px; line-height: 1.15; }
+    .lead { margin: 0; color: var(--muted); font-size: 18px; }
+    .workspace { display: grid; grid-template-columns: 1fr 360px; gap: 34px; margin-top: 34px; }
+    .window, .tip {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+    }
+    .window { overflow: hidden; }
+    .window-title { padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--panel); font-weight: 700; }
+    .files { padding: 18px; display: grid; gap: 12px; }
+    .file { display: flex; align-items: center; gap: 13px; padding: 14px; border-radius: 12px; }
+    .file.selected { background: var(--accent-soft); outline: 2px solid var(--accent); }
+    .icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px; background: #e8edf7; font-size: 22px; }
+    .file strong { display: block; }
+    .file small { color: var(--muted); }
+    .tip { align-self: start; padding: 24px; background: #fbfbff; }
+    .step { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 20px; font-weight: 800; }
+    .tip h2 { margin: 18px 0 8px; font-size: 23px; }
+    .tip p { margin: 0; color: var(--muted); }
+    .action { display: inline-flex; margin-top: 20px; padding: 12px 16px; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 800; }
+    .extension-page { margin-top: 34px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    .extension-page { width: 1250px; }
+    .extension-head { display: flex; align-items: center; justify-content: space-between; padding: 22px 26px; background: var(--panel); }
+    .toggle { width: 54px; height: 30px; padding: 4px; border-radius: 20px; background: var(--accent); }
+    .toggle::after { content: ""; display: block; width: 22px; height: 22px; margin-left: 24px; border-radius: 50%; background: #fff; }
+    .toolbar { display: flex; gap: 12px; padding: 18px 26px; border-top: 1px solid var(--line); }
+    .button { padding: 11px 18px; border: 1px solid var(--accent); border-radius: 9px; color: var(--accent); font-weight: 750; }
+    .button.primary { background: var(--accent); color: #fff; }
+    .extension-card { display: flex; align-items: center; gap: 16px; margin: 0 26px 26px; padding: 22px; border: 1px solid var(--line); border-radius: 14px; }
+    .logo { width: 58px; height: 58px; padding: 5px; border-radius: 14px; background: #111b34; object-fit: contain; }
+    .pin-popover { width: 430px; margin: 28px auto 0; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 48px rgba(31,45,82,.18); overflow: hidden; }
+    .pin-title { padding: 18px 22px; border-bottom: 1px solid var(--line); font-size: 19px; font-weight: 800; }
+    .pin-row { display: flex; align-items: center; gap: 14px; padding: 20px 22px; }
+    .pin { margin-left: auto; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 22px; }
+    .done { color: var(--success); font-weight: 750; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="shot" id="extract">
+      <div class="topbar"><div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="address">Descargas › Follow-Tracker-main.zip</div></div>
+      <div class="content">
+        <div class="eyebrow">Paso 2 · Descomprimir</div>
+        <h1>Extraé el archivo ZIP</h1>
+        <p class="lead">En Descargas, hacé clic derecho sobre el ZIP y elegí <strong>Extraer todo…</strong></p>
+        <div class="workspace">
+          <div class="window">
+            <div class="window-title">Descargas</div>
+            <div class="files">
+              <div class="file selected"><span class="icon">🗜️</span><span><strong>Follow-Tracker-main.zip</strong><small>Carpeta comprimida</small></span></div>
+              <div class="file"><span class="icon">📁</span><span><strong>Follow-Tracker-main</strong><small>Esta carpeta aparecerá al extraer</small></span></div>
+            </div>
+          </div>
+          <aside class="tip"><span class="step">2</span><h2>Extraer todo…</h2><p>No cargues el ZIP directamente en Chrome. Primero necesitás una carpeta normal.</p><span class="action">Extraer</span></aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="shot" id="load">
+      <div class="topbar"><div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="address">chrome://extensions</div></div>
+      <div class="content">
+        <div class="eyebrow">Paso 3 · Instalar</div>
+        <h1>Cargá la extensión descomprimida</h1>
+        <p class="lead">Activá <strong>Modo desarrollador</strong> y después pulsá <strong>Cargar descomprimida</strong>.</p>
+        <div class="extension-page">
+          <div class="extension-head"><strong style="font-size:24px">Extensiones</strong><span style="display:flex;align-items:center;gap:12px"><strong>Modo desarrollador</strong><i class="toggle"></i></span></div>
+          <div class="toolbar"><span class="button primary">Cargar descomprimida</span><span class="button">Empaquetar extensión</span><span class="button">Actualizar</span></div>
+          <div class="extension-card"><img class="logo" src="../extension/icons/icon-128.png" alt="Logo de Follow Tracker"><span><strong style="font-size:19px">Follow Tracker</strong><br><span class="done">Extensión local lista</span></span></div>
+        </div>
+        <p style="margin:22px 0 0;color:var(--muted)">Cuando se abra el selector, elegí <strong>Follow-Tracker-main › extension</strong> (la carpeta que contiene <code>manifest.json</code>).</p>
+      </div>
+    </section>
+
+    <section class="shot" id="pin">
+      <div class="topbar"><div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div><div class="address">Barra de herramientas de Chrome</div></div>
+      <div class="content">
+        <div class="eyebrow">Paso 4 · Tenerla a mano</div>
+        <h1>Fijá Follow Tracker en la barra</h1>
+        <p class="lead">Abrí el menú de extensiones (pieza de rompecabezas) y pulsá el pin junto a Follow Tracker.</p>
+        <div class="pin-popover">
+          <div class="pin-title">Extensiones</div>
+          <div class="pin-row"><img class="logo" src="../extension/icons/icon-128.png" alt="Logo de Follow Tracker"><span><strong>Follow Tracker</strong><br><small style="color:var(--muted)">Acceso rápido desde Instagram</small></span><span class="pin">📌</span></div>
+        </div>
+        <p style="margin:26px auto 0;max-width:620px;text-align:center;color:var(--muted)">Después, iniciá sesión en Instagram, abrí un perfil y hacé clic en el icono de Follow Tracker.</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

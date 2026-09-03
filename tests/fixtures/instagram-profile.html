@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Instagram · Fixture local</title>
+    <style>
+      body { font: 16px system-ui, sans-serif; margin: 2rem auto; max-width: 42rem; }
+      button { margin-right: .5rem; padding: .5rem .8rem; }
+      [role="dialog"] { border: 1px solid #aaa; border-radius: 8px; min-width: 20rem; padding: 1rem; }
+      [data-testid="user-row"] { padding: .35rem 0; }
+    </style>
+  </head>
+  <body data-testid="instagram-profile" data-profile="demo_profile">
+    <header>
+      <h1 data-testid="profile-name">Demo Profile</h1>
+      <p>Fixture local sin tráfico externo para pruebas de regresión.</p>
+      <button type="button" data-testid="followers-button" data-target="followers">3 seguidores</button>
+      <button type="button" data-testid="following-button" data-target="following">2 seguidos</button>
+    </header>
+    <div role="dialog" hidden data-testid="followers-dialog" aria-label="Seguidores">
+      <h2>Seguidores</h2>
+      <div data-testid="followers-list"></div>
+      <button type="button" data-testid="followers-close">Cerrar</button>
+    </div>
+    <div role="dialog" hidden data-testid="following-dialog" aria-label="Seguidos">
+      <h2>Seguidos</h2>
+      <div data-testid="following-list"></div>
+      <button type="button" data-testid="following-close">Cerrar</button>
+    </div>
+    <script>
+      const data = {
+        followers: [['ana', 'Ana Demo'], ['beto', 'Beto Demo'], ['carla', 'Carla Demo']],
+        following: [['ana', 'Ana Demo'], ['diana', 'Diana Demo']]
+      };
+      for (const kind of Object.keys(data)) {
+        const dialog = document.querySelector(`[data-testid="${kind}-dialog"]`);
+        const list = dialog.querySelector(`[data-testid="${kind}-list"]`);
+        for (const [username, fullName] of data[kind]) {
+          const row = document.createElement('div');
+          row.dataset.testid = 'user-row';
+          row.setAttribute('role', 'listitem');
+          row.dataset.username = username;
+          row.innerHTML = `<a href="/${username}/" title="${fullName}">@${username}</a>`;
+          list.append(row);
+        }
+        document.querySelector(`[data-testid="${kind}-button"]`).addEventListener('click', () => { dialog.hidden = false; });
+        dialog.querySelector(`[data-testid="${kind}-close"]`).addEventListener('click', () => { dialog.hidden = true; });
+      }
+    </script>
+  </body>
+</html>

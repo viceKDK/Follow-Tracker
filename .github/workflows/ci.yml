@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run check
+      - run: npm run e2e:fixture
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure() && hashFiles('output/playwright/**', 'playwright-report/**', 'test-results/**') != ''
+        with:
+          name: follow-tracker-e2e-debug-${{ github.sha }}
+          path: |
+            output/playwright/
+            playwright-report/
+            test-results/
+          retention-days: 3
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('dist/*.zip') != ''
+        with:
+          name: follow-tracker-package-${{ github.sha }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            dist/release-manifest.json
+          retention-days: 7

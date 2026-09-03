@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "Follow Tracker - Antes y ahora",
+  "description": "Captura, revisa y compara seguidores de Instagram con historial local, identidad estable y backups manuales.",
+  "version": "3.0.0",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://instagram.com/*"
+  ],
+  "action": {
+    "default_title": "Follow Tracker",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "dashboard.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.instagram.com/*",
+        "https://instagram.com/*"
+      ],
+      "js": [
+        "follower-identity.js",
+        "follower-imports.js",
+        "follower-relations.js",
+        "core-facade.js",
+        "trust-core.js",
+        "trust-domain-adapter.js",
+        "platform-storage.js",
+        "capture-store.js",
+        "instagram-api.js",
+        "instagram-ui.js",
+        "analysis-overlay.js",
+        "analysis-controller.js",
+        "content-entry.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

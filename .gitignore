@@ -1,0 +1,39 @@
+# Dependencies and local tooling
+node_modules/
+.playwright-cli/
+
+# Test output
+output/playwright/
+output/
+extension/icons/*-source.png
+# Superseded ImageGen drafts kept locally for comparison only
+extension/icons/metric-*-v3.png
+extension/icons/app-icon-master-v2.png
+design/mockups/metric-*-v3-source.png
+design/mockups/favicon-concept-*-source.png
+design/mockups/relationship-mascots-source.png
+playwright-report/
+test-results/
+
+# Packaged extension
+*.zip
+release/
+dist/
+
+# Local data exports
+ig_auto_*.csv
+ig_auto_*.xls
+follow-tracker_*.csv
+follow-tracker_*.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Documentation screenshots are intentionally versioned
+!docs/
+!docs/*.png
+!docs/*.jpg
+!docs/*.gif

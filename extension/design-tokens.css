@@ -1,0 +1,76 @@
+/* Follow Tracker design system — single source of truth for every product surface. */
+:root {
+  color-scheme: light;
+
+  /* Brand */
+  --ft-brand: #635bff;
+  --ft-brand-hover: #5148e5;
+  --ft-brand-active: #4338ca;
+  --ft-brand-soft: #f0efff;
+
+  /* Neutral scale */
+  --ft-white: #ffffff;
+  --ft-neutral-950: #101828;
+  --ft-neutral-900: #182230;
+  --ft-neutral-700: #344054;
+  --ft-neutral-500: #667085;
+  --ft-neutral-400: #98a2b3;
+  --ft-neutral-300: #d0d5dd;
+  --ft-neutral-200: #e4e7ec;
+  --ft-neutral-100: #f2f4f7;
+  --ft-neutral-50: #f7f8fa;
+
+  /* Semantic colors — never use these as decoration. */
+  --ft-success: #12805c;
+  --ft-success-soft: #ecfdf3;
+  --ft-warning: #b7640b;
+  --ft-warning-soft: #fffaeb;
+  --ft-danger: #d33f5a;
+  --ft-danger-soft: #fff1f3;
+  --ft-info: #475467;
+  --ft-info-soft: #f2f4f7;
+
+  /* Relationship and change meanings */
+  --ft-relation-mutual: #9a6700;
+  --ft-relation-mutual-soft: #fff7d6;
+  --ft-relation-follows-you: var(--ft-success);
+  --ft-relation-follows-you-soft: var(--ft-success-soft);
+  --ft-relation-you-follow: #2563eb;
+  --ft-relation-you-follow-soft: #eff6ff;
+  --ft-relation-none: var(--ft-neutral-500);
+  --ft-relation-none-soft: var(--ft-neutral-100);
+  --ft-change-you-unfollowed: #c2410c;
+  --ft-change-you-unfollowed-soft: #fff7ed;
+
+  /* Product surfaces */
+  --ft-page: #f6f7f9;
+  --ft-surface: var(--ft-white);
+  --ft-surface-subtle: var(--ft-neutral-50);
+  --ft-sidebar: var(--ft-neutral-950);
+  --ft-text: var(--ft-neutral-900);
+  --ft-text-secondary: var(--ft-neutral-500);
+  --ft-text-tertiary: var(--ft-neutral-400);
+  --ft-border: var(--ft-neutral-200);
+  --ft-border-strong: var(--ft-neutral-300);
+
+  /* Typography */
+  --ft-font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ft-font-xs: 12px;
+  --ft-font-sm: 13px;
+  --ft-font-md: 14px;
+  --ft-font-lg: 16px;
+  --ft-font-xl: 20px;
+  --ft-font-display: 30px;
+  --ft-weight-regular: 400;
+  --ft-weight-medium: 500;
+  --ft-weight-semibold: 600;
+  --ft-weight-bold: 700;
+
+  /* Shape, rhythm and elevation */
+  --ft-radius-sm: 8px;
+  --ft-radius-md: 12px;
+  --ft-radius-lg: 16px;
+  --ft-shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --ft-shadow-sm: 0 4px 12px rgba(16, 24, 40, 0.06);
+  --ft-focus-ring: 0 0 0 3px rgba(99, 91, 255, 0.18);
+}
