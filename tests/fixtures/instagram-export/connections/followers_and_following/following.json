@@ -1,0 +1,24 @@
+{
+  "relationships_following": [
+    {
+      "title": "Ana Persona",
+      "string_list_data": [
+        {
+          "href": "https://www.instagram.com/ana/",
+          "value": "ana",
+          "timestamp": 1788206600
+        }
+      ]
+    },
+    {
+      "title": "Diana Persona",
+      "string_list_data": [
+        {
+          "href": "https://www.instagram.com/diana/",
+          "value": "diana",
+          "timestamp": 1788206700
+        }
+      ]
+    }
+  ]
+}
