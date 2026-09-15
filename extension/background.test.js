@@ -114,7 +114,7 @@ test("la migración crea versión, configuración segura y backup al instalar", 
   assert.equal(harness.data.ft_settings.confirmRemovalsAfter, 2);
   assert.equal(harness.data.ft_settings.autoAcceptTrusted, false);
   assert.equal(harness.data.ft_settings.minRemovalConfidence, 0.95);
-  assert.equal(harness.data.ft_storage_meta.schemaVersion, 2);
+  assert.equal(harness.data.ft_storage_meta.schemaVersion, 3);
   assert.ok(harness.data.ft_storage_migration_backup.checksum);
   assert.equal(harness.listeners.startup.length, 1);
 });
