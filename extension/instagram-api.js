@@ -36,6 +36,13 @@
     });
   }
 
+  function terminalHttpError(message, status) {
+    const error = new Error(message);
+    error.status = Number(status) || 0;
+    error.retryable = false;
+    return error;
+  }
+
   async function requestJson(url, options) {
     const settings = { ...DEFAULTS, ...(options || {}) };
     let lastError = null;
@@ -49,7 +56,9 @@
         const response = await fetch(url, { method: "GET", credentials: "include",
           headers: { ...headers(), referer: settings.referer || `${location.origin}/` }, signal: controller.signal });
         if (response.ok) return await response.json();
-        if (response.status === 401 || response.status === 403) throw new Error("Instagram pidió volver a iniciar sesión o no permite ver esas listas.");
+        if (response.status === 401 || response.status === 403) {
+          throw terminalHttpError("Instagram pidió volver a iniciar sesión o no permite ver esas listas.", response.status);
+        }
         if ([429, 502, 503, 504].includes(response.status)) {
           const retryHeader = Number(response.headers.get("retry-after")) * 1000;
           const wait = Number.isFinite(retryHeader) && retryHeader > 0 ? retryHeader : Math.min(settings.maxBackoffMs, 1200 * Math.pow(2, attempt - 1));
@@ -57,9 +66,10 @@
           await sleep(wait + Math.floor(Math.random() * 400), settings.signal);
           continue;
         }
-        throw new Error(`Instagram rechazó la consulta (HTTP ${response.status}).`);
+        throw terminalHttpError(`Instagram rechazó la consulta (HTTP ${response.status}).`, response.status);
       } catch (error) {
         if (settings.signal && settings.signal.aborted) throw new DOMException("Cancelado", "AbortError");
+        if (error && error.retryable === false) throw error;
         lastError = error && error.name === "AbortError" ? new Error("Instagram demoró demasiado en responder.") : error;
         if (attempt >= settings.maxAttempts) break;
         const wait = Math.min(settings.maxBackoffMs, 900 * Math.pow(2, attempt - 1));
@@ -166,5 +176,5 @@
         following: { paginationCompleted: following.paginationCompleted } } }, warnings };
   }
 
-  return { DEFAULTS, apiUser, collectPhase, collectProfile, cookie, headers, profileFromLocation, profileInfo, requestJson };
+  return { DEFAULTS, apiUser, collectPhase, collectProfile, cookie, headers, profileFromLocation, profileInfo, requestJson, terminalHttpError };
 });
