@@ -9,6 +9,10 @@ const fixtureHtml = fs.readFileSync(
   path.join(projectRoot, "tests", "fixtures", "instagram-profile.html"),
   "utf8"
 );
+const selectorVariantHtml = fs.readFileSync(
+  path.join(projectRoot, "tests", "fixtures", "instagram-profile-selector-variant.html"),
+  "utf8"
+);
 
 async function installBrowserMocks(page, seed = {}) {
   await page.addInitScript(({ initialStorage }) => {
@@ -135,6 +139,24 @@ async function mockInstagram(page, counts, custom = {}) {
   return unexpected;
 }
 
+async function mockUiFallback(page) {
+  const unexpected = [];
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.href === "https://www.instagram.com/demo_profile/") {
+      await route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: selectorVariantHtml });
+      return;
+    }
+    if (url.pathname === "/api/v1/users/web_profile_info/") {
+      await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ message: "fixture forces UI fallback" }) });
+      return;
+    }
+    unexpected.push(url.href);
+    await route.abort("blockedbyclient");
+  });
+  return unexpected;
+}
+
 async function loadExtension(page) {
   // Debe reflejar exactamente el orden de manifest.json. No usamos core.js
   // aquí porque es un bootstrap para páginas internas, no el content script.
@@ -145,9 +167,12 @@ async function loadExtension(page) {
     "core-facade.js",
     "trust-core.js",
     "trust-domain-adapter.js",
+    "identity-registry-adapter.js",
+    "anomaly-confidence-adapter.js",
     "platform-storage.js",
     "capture-store.js",
     "instagram-api.js",
+    "instagram-selector-adapter.js",
     "instagram-ui.js",
     "analysis-overlay.js",
     "analysis-controller.js",
@@ -197,6 +222,33 @@ for (const scenario of [
   });
 }
 
+test("si la API falla usa adapters de selectores y mantiene followers/following aislados", async ({ page }) => {
+  await installBrowserMocks(page);
+  const unexpected = await mockUiFallback(page);
+  await page.goto("https://www.instagram.com/demo_profile/");
+  await loadExtension(page);
+  await runAndSave(page);
+
+  const result = await page.evaluate(() => {
+    const storage = globalThis.__ftTest.storage;
+    const report = Object.values(storage.ft_capture_meta_demo_profile.reports)[0];
+    return {
+      followers: storage.ft_history_demo_profile.followers,
+      following: storage.ft_history_demo_profile.following,
+      source: report.source,
+      selectorConfidence: report.selectorConfidence,
+      anomalies: report.anomalies,
+    };
+  });
+
+  expect(result.followers).toEqual(["ana", "beto", "carla"]);
+  expect(result.following).toEqual(["ana", "diana"]);
+  expect(result.source).toBe("ui");
+  expect(result.selectorConfidence).toBeGreaterThanOrEqual(0.9);
+  expect(result.anomalies.filter((entry) => entry.kind === "selector_drift")).toHaveLength(0);
+  expect(unexpected).toEqual([]);
+});
+
 test("un ID estable conserva la misma persona cuando cambia de username", async ({ page }) => {
   const seed = {
     ft_history_demo_profile: {
@@ -239,6 +291,7 @@ test("un ID estable conserva la misma persona cuando cambia de username", async 
   expect(result.ft_identity_demo_profile.records["id:77"].currentUsername).toBe("nombre_nuevo");
   const metadata = Object.values(result.ft_capture_meta_demo_profile.reports)[0];
   expect(metadata.renames).toHaveLength(1);
+  expect(metadata.renames[0].confidence).toBe(1);
   expect(metadata.changes.lostFollowers).toEqual([]);
 });
 
