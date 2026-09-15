@@ -53,7 +53,7 @@
     visited.add(value);
     if (Array.isArray(value.string_list_data)) {
       value.string_list_data.forEach((entry) => addUser({
-        username: entry && (entry.value || entry.username || entry.href),
+        username: entry && (entry.value || entry.username || userFromHref(entry.href) || entry.href),
         fullName: value.title || value.full_name || value.fullName || "",
         id: entry && (entry.id || entry.pk || entry.pk_id || entry.instagram_user_id),
         href: entry && entry.href,
