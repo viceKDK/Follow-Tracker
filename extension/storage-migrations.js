@@ -5,7 +5,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const STORAGE_SCHEMA_VERSION = 2;
+  const STORAGE_SCHEMA_VERSION = 3;
   const STORAGE_META_KEY = "ft_storage_meta";
   const MIGRATION_BACKUP_KEY = "ft_storage_migration_backup";
   const DEFAULT_SETTINGS = Object.freeze({
@@ -33,6 +33,98 @@
       hash = Math.imul(hash, 16777619);
     }
     return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+  }
+
+  function normalizeUsername(value) {
+    const raw = typeof value === "string" ? value : value && (value.currentUsername || value.username || value.canonicalUsername);
+    return String(raw || "").trim().replace(/^@+/, "")
+      .replace(/^https?:\/\/(?:www\.)?instagram\.com\//i, "").split(/[/?#]/)[0]
+      .replace(/[^a-zA-Z0-9._]/g, "").toLowerCase();
+  }
+
+  function normalizeInstagramId(value) {
+    const raw = value && typeof value === "object"
+      ? value.instagramUserId || value.instagram_user_id || value.pk || value.pk_id || value.id
+      : value;
+    const text = String(raw == null ? "" : raw).trim();
+    return /^\d+$/.test(text) ? text : "";
+  }
+
+  function latestRecord(primary, secondary) {
+    const primaryTime = Date.parse(primary && primary.lastSeenAt || "") || 0;
+    const secondaryTime = Date.parse(secondary && secondary.lastSeenAt || "") || 0;
+    return secondaryTime >= primaryTime ? secondary : primary;
+  }
+
+  function mergeIdentityRecord(primary, secondary, key) {
+    const preferred = latestRecord(primary, secondary) || secondary || primary || {};
+    const fallback = preferred === secondary ? primary || {} : secondary || {};
+    const canonicalUsername = normalizeUsername(primary && primary.canonicalUsername || secondary && secondary.canonicalUsername
+      || primary && primary.currentUsername || secondary && secondary.currentUsername);
+    const currentUsername = normalizeUsername(preferred.currentUsername || preferred.username || fallback.currentUsername || canonicalUsername);
+    const previousUsernames = [...new Set([
+      ...(primary && primary.previousUsernames || []), ...(primary && primary.aliases || []),
+      ...(secondary && secondary.previousUsernames || []), ...(secondary && secondary.aliases || []),
+      primary && primary.currentUsername, secondary && secondary.currentUsername, canonicalUsername, currentUsername,
+    ].map(normalizeUsername).filter(Boolean))];
+    return {
+      ...fallback,
+      ...preferred,
+      key,
+      instagramUserId: normalizeInstagramId(secondary) || normalizeInstagramId(primary),
+      canonicalUsername: canonicalUsername || currentUsername,
+      currentUsername: currentUsername || canonicalUsername,
+      previousUsernames,
+      firstSeenAt: String(primary && primary.firstSeenAt || secondary && secondary.firstSeenAt || new Date(0).toISOString()),
+      lastSeenAt: String(preferred.lastSeenAt || fallback.lastSeenAt || new Date(0).toISOString()),
+    };
+  }
+
+  function migrateIdentityRegistry(value, profileValue) {
+    const input = value && typeof value === "object" ? value : {};
+    const recordsInput = input.records && typeof input.records === "object" ? input.records : {};
+    const records = {};
+    const aliases = {};
+    const keyMap = new Map();
+
+    Object.entries(recordsInput).forEach(([oldKey, record]) => {
+      if (!record || typeof record !== "object") return;
+      const currentUsername = normalizeUsername(record.currentUsername || record.username || record.canonicalUsername);
+      const canonicalUsername = normalizeUsername(record.canonicalUsername || currentUsername);
+      if (!canonicalUsername) return;
+      const instagramUserId = normalizeInstagramId(record);
+      const key = instagramUserId ? `id:${instagramUserId}` : `username:${canonicalUsername}`;
+      keyMap.set(oldKey, key);
+      const normalized = {
+        ...record,
+        key,
+        instagramUserId,
+        canonicalUsername,
+        currentUsername: currentUsername || canonicalUsername,
+        previousUsernames: [...new Set([...(record.previousUsernames || []), ...(record.aliases || []), canonicalUsername, currentUsername]
+          .map(normalizeUsername).filter(Boolean))],
+      };
+      records[key] = records[key] ? mergeIdentityRecord(records[key], normalized, key) : normalized;
+    });
+
+    Object.entries(input.aliases && typeof input.aliases === "object" ? input.aliases : {}).forEach(([alias, oldKey]) => {
+      const normalizedAlias = normalizeUsername(alias);
+      const target = keyMap.get(oldKey) || oldKey;
+      if (normalizedAlias && records[target]) aliases[normalizedAlias] = target;
+    });
+    Object.entries(records).forEach(([key, record]) => {
+      (record.previousUsernames || []).forEach((alias) => { aliases[alias] = key; });
+      if (record.currentUsername) aliases[record.currentUsername] = key;
+      if (record.canonicalUsername) aliases[record.canonicalUsername] = key;
+    });
+
+    return {
+      ...input,
+      schemaVersion: 2,
+      profile: String(input.profile || profileValue || "perfil"),
+      records,
+      aliases,
+    };
   }
 
   function currentVersion(items) {
@@ -90,8 +182,14 @@
       });
     }
 
-    if (fromVersion < 2) {
+    if (fromVersion < 2) setValue("ft_settings", normalizeSettings(updates.ft_settings || items.ft_settings));
+
+    if (fromVersion < 3) {
       setValue("ft_settings", normalizeSettings(updates.ft_settings || items.ft_settings));
+      Object.keys(items).filter((key) => key.startsWith("ft_identity_")).forEach((identityKey) => {
+        const profile = identityKey.slice("ft_identity_".length);
+        setValue(identityKey, migrateIdentityRegistry(items[identityKey], profile));
+      });
     }
 
     remember(STORAGE_META_KEY);
@@ -114,6 +212,12 @@
     Object.entries(value).forEach(([key, entry]) => {
       if (key.startsWith("ft_history_") && (!entry || typeof entry !== "object" || !Array.isArray(entry.followers) || !Array.isArray(entry.following))) errors.push(`invalid_history:${key}`);
       if (key.startsWith("ft_capture_meta_") && (!entry || typeof entry !== "object" || !entry.reports || typeof entry.reports !== "object")) errors.push(`invalid_capture_meta:${key}`);
+      if (key.startsWith("ft_identity_") && entry && typeof entry === "object") {
+        const records = entry.records && typeof entry.records === "object" ? entry.records : {};
+        Object.entries(entry.aliases && typeof entry.aliases === "object" ? entry.aliases : {}).forEach(([alias, target]) => {
+          if (!records[target]) errors.push(`invalid_identity_alias:${key}:${alias}`);
+        });
+      }
     });
     return { ok: errors.length === 0, errors, version };
   }
@@ -164,5 +268,5 @@
   }
 
   return { DEFAULT_SETTINGS, MIGRATION_BACKUP_KEY, STORAGE_META_KEY, STORAGE_SCHEMA_VERSION, checksum, currentVersion,
-    migrateStorage, normalizeSettings, planStorageMigration, restoreMigration, validateBackup, validateStorageSnapshot };
+    migrateIdentityRegistry, migrateStorage, normalizeSettings, planStorageMigration, restoreMigration, validateBackup, validateStorageSnapshot };
 });
