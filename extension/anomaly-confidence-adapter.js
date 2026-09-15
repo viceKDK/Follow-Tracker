@@ -11,9 +11,22 @@
 
   const ANOMALY_SCHEMA_VERSION = 1;
   const baseBuildCaptureReview = Trust.buildCaptureReview.bind(Trust);
+  const baseNormalizeCaptureMetrics = Trust.normalizeCaptureMetrics.bind(Trust);
 
   function clamp(value) {
     return Math.min(1, Math.max(0, Number(value) || 0));
+  }
+
+  function normalizeCaptureMetrics(value, fallback) {
+    const input = value && typeof value === "object" ? value : {};
+    const normalized = baseNormalizeCaptureMetrics(input, fallback);
+    ["followers", "following"].forEach((phase) => {
+      const source = input[phase] && typeof input[phase] === "object" ? input[phase] : {};
+      const confidence = Number(source.selectorConfidence);
+      if (Number.isFinite(confidence)) normalized[phase].selectorConfidence = clamp(confidence);
+      if (source.selectorStrategy) normalized[phase].selectorStrategy = String(source.selectorStrategy);
+    });
+    return normalized;
   }
 
   function selectorConfidence(input) {
@@ -119,6 +132,6 @@
     };
   }
 
-  Object.assign(Trust, { ANOMALY_SCHEMA_VERSION, buildAnomalies, buildCaptureReview, selectorConfidence });
+  Object.assign(Trust, { ANOMALY_SCHEMA_VERSION, buildAnomalies, buildCaptureReview, normalizeCaptureMetrics, selectorConfidence });
   return Trust;
 });
