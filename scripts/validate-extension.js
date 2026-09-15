@@ -97,7 +97,7 @@ walk(extensionDir).filter((file) => file.endsWith(".html")).forEach((file) => co
 const runtime = [
   "follower-identity.js", "follower-imports.js", "follower-relations.js", "core-facade.js", "core.js",
   "follower-history-model.js", "follower-history-engine.js", "follower-projections.js", "history-facade.js", "history.js",
-  "history-guard.js", "history-quality.js", "maintenance.js", "platform-storage.js", "storage-migrations.js", "dashboard-runtime.js",
+  "history-guard.js", "history-quality.js", "maintenance.js", "platform-storage.js", "storage-identity-migration.js", "storage-migrations.js", "dashboard-runtime.js",
   "dashboard-projection.js", "relationship-core.js", "admin-core.js", "product-core.js", "product-guidance.js", "trust-core.js",
   "trust-domain-adapter.js", "identity-registry-adapter.js", "anomaly-confidence-adapter.js", "capture-store.js",
   "instagram-api.js", "instagram-selector-adapter.js", "instagram-ui.js", "analysis-overlay.js",
@@ -134,7 +134,7 @@ function requireSourceOrder(source, expected, label) {
 requireSourceOrder(backgroundSource, [
   "follower-identity.js", "follower-imports.js", "follower-relations.js", "core-facade.js",
   "follower-history-model.js", "follower-history-engine.js", "follower-projections.js", "history-facade.js",
-  "history-guard.js", "history-quality.js", "storage-migrations.js",
+  "history-guard.js", "history-quality.js", "storage-identity-migration.js", "storage-migrations.js",
 ], "background.importScripts");
 if (/\bCONTENT_FILES\b|chrome\.scripting|executeScript\s*\(/.test(backgroundSource)) {
   fail("background.js no debe inyectar scripts dinámicamente; el runtime usa content_scripts declarativos.");
