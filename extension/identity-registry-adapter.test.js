@@ -34,6 +34,7 @@ test("migra un registro legacy por username al ID estable cuando cambia el usern
   assert.equal(result.registry.aliases.nombre_nuevo, "id:77");
   assert.equal(result.renames[0].confidence, 1);
   assert.equal(result.renames[0].reason, "stable_instagram_id");
+  assert.deepEqual(result.conflicts, []);
 });
 
 test("consolida duplicados username/id que representan la misma cuenta", () => {
@@ -72,6 +73,38 @@ test("consolida duplicados username/id que representan la misma cuenta", () => {
   assert.equal(result.registry.aliases.primero, "id:88");
   assert.equal(result.registry.aliases.segundo, "id:88");
   assert.equal(result.registry.aliases.tercero, "id:88");
+  assert.deepEqual(result.conflicts, []);
+});
+
+test("no fusiona cuentas distintas cuando Instagram reutiliza un username", () => {
+  const existing = {
+    profile: "demo",
+    records: {
+      "id:11": {
+        key: "id:11",
+        instagramUserId: "11",
+        canonicalUsername: "compartido",
+        currentUsername: "compartido",
+        previousUsernames: ["compartido"],
+        firstSeenAt: "2026-07-01T00:00:00Z",
+        lastSeenAt: "2026-08-01T00:00:00Z",
+      },
+    },
+    aliases: { compartido: "id:11" },
+  };
+
+  const result = Trust.updateIdentityRegistry(existing, [
+    { instagramUserId: "22", username: "compartido", fullName: "Otra Persona" },
+  ], { profile: "demo", source: "api", observedAt: "2026-09-15T00:00:00Z" });
+
+  assert.deepEqual(Object.keys(result.registry.records).sort(), ["id:11", "id:22"]);
+  assert.equal(result.registry.records["id:11"].instagramUserId, "11");
+  assert.equal(result.registry.records["id:22"].instagramUserId, "22");
+  assert.equal(result.registry.aliases.compartido, "id:22");
+  assert.equal(result.conflicts.length, 1);
+  assert.equal(result.conflicts[0].type, "username_reused_by_different_id");
+  assert.equal(result.conflicts[0].existingInstagramUserId, "11");
+  assert.equal(result.conflicts[0].incomingInstagramUserId, "22");
 });
 
 test("canonicalizeRelationshipLists evita altas/bajas falsas tras un rename con ID", () => {
@@ -98,4 +131,5 @@ test("canonicalizeRelationshipLists evita altas/bajas falsas tras un rename con 
   assert.equal(result.renames.length, 1);
   assert.equal(result.renames[0].from, "viejo");
   assert.equal(result.renames[0].to, "nuevo");
+  assert.deepEqual(result.conflicts, []);
 });
