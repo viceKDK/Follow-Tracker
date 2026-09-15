@@ -38,6 +38,8 @@ test("carga el adaptador de integridad usado por capture-store", () => {
   assert.equal(typeof Trust.normalizeCaptureMetrics, "function");
   assert.equal(typeof Trust.assessCaptureCompleteness, "function");
   assert.equal(typeof Trust.applyAbsencePolicy, "function");
+  assert.equal(typeof Trust.buildAnomalies, "function");
+  assert.equal(typeof Trust.aliasCanMergeWithId, "function");
 });
 
 test("un cambio de username con el mismo ID no inventa una baja", async () => {
@@ -74,8 +76,12 @@ test("un cambio de username con el mismo ID no inventa una baja", async () => {
   assert.deepEqual(stage.snapshot.followers, ["nombre_viejo"]);
   assert.deepEqual(stage.review.changes.lostFollowers, []);
   assert.equal(stage.review.renames.length, 1);
+  assert.equal(stage.snapshot.storageSchemaVersion, 3);
   await CaptureStore.commitStage(stage, "save");
   assert.deepEqual(data[keys.history].followers, ["nombre_viejo"]);
+  assert.equal(data[keys.history].storageSchemaVersion, 3);
+  assert.equal(data[keys.captureMeta].storageSchemaVersion, 3);
+  assert.equal(data[keys.profileMeta].storageSchemaVersion, 3);
   assert.equal(data[keys.identities].records["id:123"].currentUsername, "nombre_nuevo");
   assert.equal(data[keys.captureMeta].reports.r2.status, "trusted");
   assert.equal(data[keys.pending], undefined);
@@ -164,6 +170,7 @@ test("importa las dos listas oficiales como una captura revisada", async () => {
   });
   assert.equal(stage.source, "instagram_export");
   assert.deepEqual(stage.snapshot.followers, ["ana", "beto"]);
+  assert.equal(stage.importSummary.parts[0].sourcePath, "followers_1.json");
   await CaptureStore.commitStage(stage, "save");
   assert.equal(data[keys.history].runId, "official-r1");
   assert.equal(data[keys.captureMeta].reports["official-r1"].source, "instagram_export");
