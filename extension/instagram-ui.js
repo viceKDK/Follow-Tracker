@@ -1,9 +1,10 @@
 (function (root, factory) {
   const trust = root && root.FollowTrackerTrust ? root.FollowTrackerTrust : (typeof module === "object" && module.exports ? require("./trust-core.js") : null);
-  const api = factory(trust); if (typeof module === "object" && module.exports) module.exports = api; if (root) root.FollowTrackerInstagramUi = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function (Trust) {
+  const selectors = root && root.FollowTrackerInstagramSelectors ? root.FollowTrackerInstagramSelectors : (typeof module === "object" && module.exports ? require("./instagram-selector-adapter.js") : null);
+  const api = factory(trust, selectors); if (typeof module === "object" && module.exports) module.exports = api; if (root) root.FollowTrackerInstagramUi = api;
+})(typeof globalThis !== "undefined" ? globalThis : this, function (Trust, Selectors) {
   "use strict";
-  if (!Trust) throw new Error("Follow Tracker Instagram UI no pudo cargar Trust Core.");
+  if (!Trust || !Selectors) throw new Error("Follow Tracker Instagram UI no pudo cargar Trust Core y Selectors.");
   const DEFAULTS = Object.freeze({ openTimeoutMs: 12000, settleMs: 500, scrollDelayMs: 420,
     stagnantLimit: 14, maxIterations: 3000, maxUsers: 100000 });
 
@@ -24,12 +25,7 @@
   }
 
   function triggerFor(profile, phase) {
-    const direct = document.querySelector(`a[href='/${profile}/${phase}/'],a[href^='/${profile}/${phase}/?']`);
-    if (direct) return direct;
-    const anchor = [...document.querySelectorAll("a[href]")].find((element) => String(element.getAttribute("href") || "").includes(`/${phase}/`));
-    if (anchor) return anchor;
-    const labels = phase === "followers" ? ["followers", "seguidores"] : ["following", "seguidos"];
-    return [...document.querySelectorAll("a,button")].find((element) => labels.some((label) => String(element.textContent || "").toLowerCase().includes(label)));
+    return Selectors.findTrigger(document, profile, phase).element;
   }
 
   function expectedInfoFromTrigger(trigger) {
@@ -51,7 +47,10 @@
     return null;
   }
 
-  function dialogOrRoute() { return document.querySelector('div[role="dialog"]') || document.querySelector("main section") || document.querySelector("main") || document.body; }
+  function dialogOrRoute(phase) {
+    const selection = Selectors.findScope(document, phase);
+    return selection.element || document.querySelector("main section") || document.querySelector("main") || document.body;
+  }
 
   function userFromHref(href) {
     let path = String(href || "");
@@ -63,11 +62,11 @@
 
   function collectVisible(scope, target) {
     let added = 0;
-    scope.querySelectorAll("a[href]").forEach((anchor) => {
+    Selectors.userAnchors(scope).forEach((anchor) => {
       const username = userFromHref(anchor.getAttribute("href"));
       if (!username || target.has(username)) return;
       const lines = String(anchor.innerText || anchor.textContent || "").split("\n").map((value) => value.trim()).filter(Boolean);
-      const row = anchor.closest("li,div[role='listitem'],div[role='button']") || anchor.parentElement;
+      const row = anchor.closest("li,div[role='listitem'],div[role='button'],[data-testid='user-row']") || anchor.parentElement;
       const image = row && row.querySelector("img[src]");
       target.set(username, Trust.normalizeUser({ username,
         fullName: lines.find((line) => Trust.normalizeUsername(line) !== username) || "",
@@ -75,10 +74,10 @@
       added += 1;
     });
     if (!added) {
-      scope.querySelectorAll("li,div[role='listitem'],div[role='button']").forEach((row) => {
+      Selectors.userRows(scope).forEach((row) => {
         const lines = String(row.innerText || "").split("\n").map((value) => value.trim()).filter(Boolean);
         if (!lines.length) return;
-        const username = Trust.normalizeUsername(lines[0]);
+        const username = Trust.normalizeUsername(row.getAttribute("data-username") || lines[0]);
         if (!username || target.has(username) || ["seguir", "following", "followers", "seguidores", "seguidos"].some((word) => username.includes(word))) return;
         const image = row.querySelector("img[src]");
         target.set(username, Trust.normalizeUser({ username, fullName: lines[1] || "",
@@ -103,24 +102,35 @@
 
   async function openPhase(profile, phase, options) {
     const settings = { ...DEFAULTS, ...(options || {}) };
-    const trigger = triggerFor(profile, phase);
+    const triggerSelection = Selectors.findTrigger(document, profile, phase);
+    const trigger = triggerSelection.element;
     const expectedInfo = expectedInfoFromTrigger(trigger);
     const expected = expectedInfo.value;
     if (trigger) trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
     else { history.pushState({}, "", `/${profile}/${phase}/`); window.dispatchEvent(new PopStateEvent("popstate")); }
+    let scopeSelection = null;
     const scope = await waitFor(() => {
-      const dialog = document.querySelector('div[role="dialog"]'); if (dialog) return dialog;
-      const routeScope = dialogOrRoute();
-      return location.pathname.toLowerCase().includes(`/${phase}/`) && routeScope.querySelectorAll("a[href]").length ? routeScope : null;
+      const candidate = Selectors.findScope(document, phase);
+      if (candidate.element && candidate.confidence >= 0.65) { scopeSelection = candidate; return candidate.element; }
+      const routeScope = dialogOrRoute(phase);
+      if (location.pathname.toLowerCase().includes(`/${phase}/`) && routeScope && routeScope.querySelectorAll("a[href]").length) {
+        scopeSelection = candidate;
+        return routeScope;
+      }
+      return null;
     }, settings.openTimeoutMs, settings.signal);
     if (!scope) throw new Error(`Instagram no abrió la lista de ${phase === "followers" ? "seguidores" : "seguidos"}.`);
     await sleep(settings.settleMs, settings.signal);
-    return { scope, expected, expectedExact: expectedInfo.exact };
+    return { scope, expected, expectedExact: expectedInfo.exact,
+      selector: { triggerStrategy: triggerSelection.strategy, triggerConfidence: triggerSelection.confidence,
+        scopeStrategy: scopeSelection && scopeSelection.strategy || "route-fallback", scopeConfidence: scopeSelection && scopeSelection.confidence || 0.6 } };
   }
 
   async function closePhase(profile, signal) {
-    const dialog = document.querySelector('div[role="dialog"]');
-    if (dialog) { const button = dialog.querySelector('button[aria-label="Cerrar"],button[aria-label="Close"]');
+    const visibleDialogs = [...document.querySelectorAll('div[role="dialog"],section[role="dialog"],[data-testid$="-dialog"]')]
+      .filter(Selectors.isVisible);
+    const dialog = visibleDialogs[0] || null;
+    if (dialog) { const button = Selectors.findCloseButton(dialog);
       if (button) button.click(); else document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await sleep(350, signal); }
     if (/\/(followers|following)\/?$/i.test(location.pathname)) { history.pushState({}, "", `/${profile}/`); window.dispatchEvent(new PopStateEvent("popstate")); await sleep(400, signal); }
   }
@@ -157,10 +167,12 @@
     await closePhase(profile, settings.signal);
     const users = Trust.uniqueUsers([...target.values()], "ui");
     const paginationCompleted = opened.expectedExact && terminationReason === "expected_reached";
-    return { users, expected: opened.expected, iterations, paginationCompleted, terminationReason,
+    const selectorConfidence = Math.min(opened.selector.triggerConfidence || 0.6, opened.selector.scopeConfidence || 0.6);
+    return { users, expected: opened.expected, iterations, paginationCompleted, terminationReason, selector: opened.selector,
       metrics: { inputRecords: target.size, validRecords: target.size, invalidRecords: 0, missingUsernameRecords: 0,
         duplicateRecords: 0, capturedCount: users.length, expectedCount: Number.isFinite(opened.expected) ? opened.expected : null,
-        pages: iterations, paginationCompleted, terminationReason },
+        pages: iterations, paginationCompleted, terminationReason, selectorConfidence,
+        selectorStrategy: `${opened.selector.triggerStrategy}/${opened.selector.scopeStrategy}` },
       warning: paginationCompleted ? "" : `La lista de ${phase === "followers" ? "seguidores" : "seguidos"} terminó por ${terminationReason}; no se usarán ausencias como bajas.` };
   }
 
@@ -174,8 +186,9 @@
       expectedFollowers: followers.expected, expectedFollowing: following.expected, durationMs: Date.now() - startedAt, retries: 0,
       captureMetrics: { followers: followers.metrics, following: following.metrics },
       completeness: { phases: { followers: { paginationCompleted: followers.paginationCompleted }, following: { paginationCompleted: following.paginationCompleted } } },
+      selectorEvidence: { followers: followers.selector, following: following.selector },
       warnings: [followers.warning, following.warning].filter(Boolean) };
   }
 
-  return { DEFAULTS, closePhase, collectPhase, collectProfile, collectVisible, expectedFromTrigger, expectedInfoFromTrigger, openPhase, parseCount, triggerFor };
+  return { DEFAULTS, closePhase, collectPhase, collectProfile, collectVisible, dialogOrRoute, expectedFromTrigger, expectedInfoFromTrigger, openPhase, parseCount, triggerFor };
 });
