@@ -8,8 +8,9 @@
   "use strict";
   if (!Domain) throw new Error("Follow Tracker Follower Identity no fue cargado.");
   const { SNAPSHOT_SCHEMA_VERSION, safeProfile, isoOrNow, normalizeUser, uniqueUsers, uniqueUsernames } = Domain;
-  const IMPORT_SCHEMA_VERSION = 2;
+  const IMPORT_SCHEMA_VERSION = 3;
   const BLOCKED_PATHS = new Set(["accounts", "about", "api", "challenge", "direct", "explore", "legal", "p", "reel", "reels", "stories", "tv"]);
+  const NON_RELATIONSHIP_EXPORTS = /(?:recently_unfollowed|follow_requests|pending_follow|close_friends|blocked|restricted|removed_suggestions)/i;
 
   function optionalNumber(value) {
     if (value === null || value === undefined || value === "") return null;
@@ -54,7 +55,8 @@
       value.string_list_data.forEach((entry) => addUser({
         username: entry && (entry.value || entry.username || entry.href),
         fullName: value.title || value.full_name || value.fullName || "",
-        id: entry && (entry.id || entry.pk || entry.pk_id),
+        id: entry && (entry.id || entry.pk || entry.pk_id || entry.instagram_user_id),
+        href: entry && entry.href,
       }, "instagram_export_json", output, stats));
     }
     if (value.username || value.user_name || value.handle) addUser(value, "instagram_export_json", output, stats);
@@ -64,10 +66,23 @@
     return stats;
   }
 
+  function normalizeImportPath(name) {
+    return String(name || "").trim().replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+  }
+
+  function baseImportName(name) {
+    const path = normalizeImportPath(name);
+    return path.split("/").filter(Boolean).pop() || path;
+  }
+
   function phaseFromImportName(name, payload) {
-    const lower = String(name || "").toLowerCase();
-    if (/followers?(?:_\d+)?\.(?:json|html?|csv)$/i.test(lower) || lower.includes("followers_")) return "followers";
-    if (lower.includes("following") || lower.includes("following_accounts")) return "following";
+    const path = normalizeImportPath(name);
+    const base = baseImportName(path);
+    if (NON_RELATIONSHIP_EXPORTS.test(path)) return "unknown";
+    if (/^followers?(?:_\d+)?\.(?:json|html?|csv)$/i.test(base)
+      || /(?:^|\/)followers_and_following\/followers?(?:_\d+)?\.(?:json|html?|csv)$/i.test(path)) return "followers";
+    if (/^(?:following|following_accounts)(?:_\d+)?\.(?:json|html?|csv)$/i.test(base)
+      || /(?:^|\/)followers_and_following\/(?:following|following_accounts)(?:_\d+)?\.(?:json|html?|csv)$/i.test(path)) return "following";
     if (payload && typeof payload === "object") {
       if (payload.relationships_followers || payload.followers) return "followers";
       if (payload.relationships_following || payload.following || payload.following_accounts) return "following";
@@ -94,11 +109,13 @@
         path = url.pathname;
       } catch (_error) { return ""; }
     }
-    const first = path.split(/[/?#]/).filter(Boolean)[0] || "";
+    const parts = path.split(/[/?#]/).filter(Boolean);
+    const first = parts[0] === "_u" ? parts[1] || "" : parts[0] || "";
     return BLOCKED_PATHS.has(first.toLowerCase()) ? "" : first;
   }
 
-  function parseCsvLine(line) {
+  function parseCsvLine(line, delimiterValue) {
+    const delimiter = delimiterValue || ",";
     const cells = [];
     let value = "";
     let quoted = false;
@@ -106,11 +123,17 @@
       const char = line[index];
       if (char === '"' && quoted && line[index + 1] === '"') { value += '"'; index += 1; }
       else if (char === '"') quoted = !quoted;
-      else if (char === "," && !quoted) { cells.push(value); value = ""; }
+      else if (char === delimiter && !quoted) { cells.push(value); value = ""; }
       else value += char;
     }
     cells.push(value);
     return cells.map((cell) => cell.trim());
+  }
+
+  function delimiterForCsv(header) {
+    const commas = (String(header || "").match(/,/g) || []).length;
+    const semicolons = (String(header || "").match(/;/g) || []).length;
+    return semicolons > commas ? ";" : ",";
   }
 
   function completenessFor(part) {
@@ -137,57 +160,61 @@
     const stats = metrics(rawStats);
     stats.duplicateRecords = Math.max(stats.duplicateRecords, stats.validRecords - users.length);
     const warnings = [...new Set((part.warnings || []).map(String).filter(Boolean))];
-    const output = { schemaVersion: IMPORT_SCHEMA_VERSION, phase: part.phase, name: String(part.name || "archivo"),
-      format: part.format, formatVersion: String(part.formatVersion || ""), users, warnings, metrics: stats,
-      expectedCount: optionalNumber(part.expectedCount),
-      completeness: null };
+    const sourcePath = normalizeImportPath(part.sourcePath || part.relativePath || part.path || part.name);
+    const output = { schemaVersion: IMPORT_SCHEMA_VERSION, phase: part.phase, name: String(part.name || baseImportName(sourcePath) || "archivo"),
+      sourcePath, format: part.format, formatVersion: String(part.formatVersion || ""), users, warnings, metrics: stats,
+      expectedCount: optionalNumber(part.expectedCount), completeness: null };
     output.completeness = completenessFor({ ...output, completeness: part.completeness });
     output.warning = warnings[0] || "";
     return output;
   }
 
+  function partPath(part) {
+    return part && (part.relativePath || part.webkitRelativePath || part.path || part.name) || "archivo";
+  }
+
   const normalizers = [
     { id: "canonical", canHandle: (part) => part && Array.isArray(part.users) && part.payload === undefined && part.content === undefined,
       normalize(part) { const stats = metrics(part.metrics); if (!stats.inputRecords) { stats.inputRecords = part.users.length; stats.validRecords = part.users.length; }
-        return finishPart({ ...part, phase: ["followers", "following"].includes(part.phase) ? part.phase : "unknown", format: part.format || "canonical",
+        return finishPart({ ...part, sourcePath: partPath(part), phase: ["followers", "following"].includes(part.phase) ? part.phase : "unknown", format: part.format || "canonical",
           warnings: [part.warning, ...(part.warnings || [])].filter(Boolean) }, stats); } },
-    { id: "instagram-json", canHandle: (part) => part && (typeof part.payload === "object" || typeof part.content === "object" || /\.json$/i.test(part.name || "")),
+    { id: "instagram-json", canHandle: (part) => part && (typeof part.payload === "object" || typeof part.content === "object" || /\.json$/i.test(partPath(part))),
       normalize(part) { let payload = part.payload !== undefined ? part.payload : part.content; const warnings = [];
         if (typeof payload === "string") { try { payload = JSON.parse(payload); } catch (_error) { warnings.push(`${part.name || "archivo"}: JSON inválido.`); payload = null; } }
-        const phase = phaseFromImportName(part.name, payload); let source = payload;
+        const sourcePath = partPath(part); const phase = phaseFromImportName(sourcePath, payload); let source = payload;
         if (phase === "followers" && payload) source = payload.relationships_followers || payload.followers || payload;
         if (phase === "following" && payload) source = payload.relationships_following || payload.following_accounts || payload.following || payload;
         const users = []; const stats = extractImportUsers(source, users);
-        if (phase === "unknown") warnings.push(`No se pudo clasificar ${part.name || "un archivo"}.`);
-        return finishPart({ ...part, phase, format: "instagram-json", users, warnings }, stats); } },
-    { id: "instagram-html", canHandle: (part) => part && (/\.html?$/i.test(part.name || "") || /^\s*</.test(String(part.payload ?? part.content ?? ""))),
-      normalize(part) { const html = String(part.payload ?? part.content ?? ""); const phase = phaseFromImportName(part.name, html); const users = []; const stats = metrics();
+        if (phase === "unknown") warnings.push(`No se pudo clasificar ${part.name || baseImportName(sourcePath) || "un archivo"}.`);
+        return finishPart({ ...part, sourcePath, phase, format: "instagram-json", users, warnings }, stats); } },
+    { id: "instagram-html", canHandle: (part) => part && (/\.html?$/i.test(partPath(part)) || /^\s*</.test(String(part.payload ?? part.content ?? ""))),
+      normalize(part) { const html = String(part.payload ?? part.content ?? ""); const sourcePath = partPath(part); const phase = phaseFromImportName(sourcePath, html); const users = []; const stats = metrics();
         const pattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi; let match;
         while ((match = pattern.exec(html))) { const username = userFromHref(match[1]); if (username) addUser({ username, fullName: decodeHtml(match[2]) }, "instagram_export_html", users, stats); }
-        const warnings = phase === "unknown" ? [`No se pudo clasificar ${part.name || "un archivo"}.`] : [];
-        if (!users.length) warnings.push(`${part.name || "El HTML"} no contiene perfiles reconocibles.`);
-        return finishPart({ ...part, phase, format: "instagram-html", users, warnings }, stats); } },
-    { id: "csv", canHandle: (part) => part && /\.csv$/i.test(part.name || ""),
+        const warnings = phase === "unknown" ? [`No se pudo clasificar ${part.name || baseImportName(sourcePath) || "un archivo"}.`] : [];
+        if (!users.length) warnings.push(`${part.name || baseImportName(sourcePath) || "El HTML"} no contiene perfiles reconocibles.`);
+        return finishPart({ ...part, sourcePath, phase, format: "instagram-html", users, warnings }, stats); } },
+    { id: "csv", canHandle: (part) => part && /\.csv$/i.test(partPath(part)),
       normalize(part) { const text = String(part.payload ?? part.content ?? ""); const lines = text.split(/\r?\n/).filter((line) => line.trim());
-        const headers = parseCsvLine(lines.shift() || "").map((value) => value.toLowerCase());
+        const header = lines.shift() || ""; const delimiter = delimiterForCsv(header); const headers = parseCsvLine(header, delimiter).map((value) => value.toLowerCase());
         const usernameIndex = headers.findIndex((value) => ["username", "user_name", "handle"].includes(value));
         const nameIndex = headers.findIndex((value) => ["full_name", "fullname", "name"].includes(value));
         const idIndex = headers.findIndex((value) => ["id", "pk", "instagram_user_id"].includes(value));
         const users = []; const stats = metrics(); const warnings = [];
-        lines.forEach((line) => { const cells = parseCsvLine(line); addUser({ username: cells[usernameIndex >= 0 ? usernameIndex : 0],
+        lines.forEach((line) => { const cells = parseCsvLine(line, delimiter); addUser({ username: cells[usernameIndex >= 0 ? usernameIndex : 0],
           fullName: nameIndex >= 0 ? cells[nameIndex] : "", id: idIndex >= 0 ? cells[idIndex] : "" }, "csv", users, stats); });
-        const phase = phaseFromImportName(part.name, text); if (usernameIndex < 0) warnings.push("El CSV no declara una columna username; se usó la primera columna.");
-        if (phase === "unknown") warnings.push(`No se pudo clasificar ${part.name || "un archivo"}.`);
-        return finishPart({ ...part, phase, format: "csv", users, warnings }, stats); } },
+        const sourcePath = partPath(part); const phase = phaseFromImportName(sourcePath, text); if (usernameIndex < 0) warnings.push("El CSV no declara una columna username; se usó la primera columna.");
+        if (phase === "unknown") warnings.push(`No se pudo clasificar ${part.name || baseImportName(sourcePath) || "un archivo"}.`);
+        return finishPart({ ...part, sourcePath, phase, format: "csv", users, warnings }, stats); } },
   ];
 
   function normalizeImportPart(part) {
-    if (!part || typeof part !== "object") return finishPart({ phase: "unknown", name: "archivo", format: "unknown", users: [], warnings: ["Archivo inválido."] }, metrics());
+    if (!part || typeof part !== "object") return finishPart({ phase: "unknown", name: "archivo", sourcePath: "archivo", format: "unknown", users: [], warnings: ["Archivo inválido."] }, metrics());
     const normalizer = normalizers.find((entry) => entry.canHandle(part));
-    return normalizer ? normalizer.normalize(part) : finishPart({ ...part, phase: "unknown", format: "unknown", users: [], warnings: [`Formato no soportado: ${part.name || "archivo"}.`] }, metrics());
+    return normalizer ? normalizer.normalize(part) : finishPart({ ...part, sourcePath: partPath(part), phase: "unknown", format: "unknown", users: [], warnings: [`Formato no soportado: ${part.name || "archivo"}.`] }, metrics());
   }
 
-  function parseInstagramExportPart(name, payload) { return normalizeImportPart({ name, payload }); }
+  function parseInstagramExportPart(name, payload) { return normalizeImportPart({ name, sourcePath: name, payload }); }
 
   function mergeInstagramExportParts(parts) {
     const normalized = (Array.isArray(parts) ? parts : []).map(normalizeImportPart);
@@ -197,7 +224,7 @@
     const following = uniqueUsers(followingParts.flatMap((part) => part.users), "instagram_export");
     const warnings = normalized.flatMap((part) => part.warnings);
     [followersParts, followingParts].forEach((phaseParts) => {
-      const numbered = phaseParts.map((part) => Number((part.name.match(/_(\d+)\.(?:json|html?|csv)$/i) || [])[1])).filter(Number.isFinite).sort((a, b) => a - b);
+      const numbered = phaseParts.map((part) => Number((baseImportName(part.sourcePath || part.name).match(/_(\d+)\.(?:json|html?|csv)$/i) || [])[1])).filter(Number.isFinite).sort((a, b) => a - b);
       if (numbered.length && (numbered[0] !== 1 || numbered.some((value, index) => index && value !== numbered[index - 1] + 1))) warnings.push("Falta una parte numerada de la exportación.");
     });
     const hasFollowers = followersParts.length > 0;
@@ -240,6 +267,6 @@
     const before = new Set(previous); const after = new Set(current); return { added: current.filter((value) => !before.has(value)), removed: previous.filter((value) => !after.has(value)),
       unchanged: current.filter((value) => before.has(value)), beforeCount: previous.length, afterCount: current.length, delta: current.length - previous.length }; }
 
-  return { IMPORT_SCHEMA_VERSION, IMPORT_NORMALIZERS: normalizers, extractImportUsers, phaseFromImportName, parseInstagramExportPart,
+  return { IMPORT_SCHEMA_VERSION, IMPORT_NORMALIZERS: normalizers, baseImportName, extractImportUsers, normalizeImportPath, phaseFromImportName, parseInstagramExportPart,
     normalizeImportPart, mergeInstagramExportParts, normalizeSnapshot, createSnapshot, diffLists };
 });
