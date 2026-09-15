@@ -106,6 +106,12 @@
     const review = baseBuildCaptureReview(input);
     const anomalies = buildAnomalies(input, review);
     const selector = selectorConfidence(input);
+    const captureMetrics = normalizeCaptureMetrics(input && input.captureMetrics || review.captureMetrics, {
+      collectedFollowers: review.collectedFollowers,
+      collectedFollowing: review.collectedFollowing,
+      expectedFollowers: review.expectedFollowers,
+      expectedFollowing: review.expectedFollowing,
+    });
     let score = Number(review.score) || 0;
     let status = review.status;
     const reasons = [...(review.reasons || [])];
@@ -125,6 +131,7 @@
       status,
       score: Math.max(0, Math.min(100, Math.round(score))),
       reasons: [...new Set(reasons)],
+      captureMetrics,
       anomalySchemaVersion: ANOMALY_SCHEMA_VERSION,
       anomalyConfidence,
       selectorConfidence: selector,
