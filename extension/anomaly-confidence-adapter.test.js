@@ -19,8 +19,8 @@ test("separa magnitud de caída de la confianza de que la anomalía sea real", (
     expectedFollowers: 50,
     expectedFollowing: 1,
     captureMetrics: {
-      followers: { capturedCount: 50, expectedCount: 50, paginationCompleted: true, selectorConfidence: 0.6 },
-      following: { capturedCount: 1, expectedCount: 1, paginationCompleted: true, selectorConfidence: 0.8 },
+      followers: { capturedCount: 50, expectedCount: 50, paginationCompleted: true, selectorConfidence: 0.6, selectorStrategy: "accessible-label/phase-dialog" },
+      following: { capturedCount: 1, expectedCount: 1, paginationCompleted: true, selectorConfidence: 0.8, selectorStrategy: "exact-route/phase-dialog" },
     },
     completeness: {
       status: "complete",
@@ -39,6 +39,8 @@ test("separa magnitud de caída de la confianza de que la anomalía sea real", (
   assert.equal(drop.evidence.dropRatio, 0.5);
   assert.ok(selector);
   assert.equal(review.selectorConfidence, 0.6);
+  assert.equal(review.captureMetrics.followers.selectorConfidence, 0.6);
+  assert.equal(review.captureMetrics.followers.selectorStrategy, "accessible-label/phase-dialog");
   assert.equal(review.status, "review");
   assert.ok(review.anomalyConfidence > 0);
 });
