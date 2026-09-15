@@ -1,6 +1,6 @@
 (function (root, factory) {
   const core = root && root.FollowTrackerCore ? root.FollowTrackerCore : (typeof module === "object" && module.exports ? require("./core.js") : null);
-  const trust = root && root.FollowTrackerTrust ? root.FollowTrackerTrust : (typeof module === "object" && module.exports ? require("./trust-domain-adapter.js") : null);
+  const trust = root && root.FollowTrackerTrust ? root.FollowTrackerTrust : (typeof module === "object" && module.exports ? require("./anomaly-confidence-adapter.js") : null);
   const storage = root && root.FollowTrackerStorage ? root.FollowTrackerStorage : (typeof module === "object" && module.exports ? require("./platform-storage.js") : null);
   const api = factory(core, trust, storage);
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -187,7 +187,7 @@
       settings,
       snapshot: {
         schemaVersion: 3,
-        storageSchemaVersion: 2,
+        storageSchemaVersion: 3,
         profile: value.profile,
         profileId: String(value.profileId || ""),
         followers: absence.followers,
@@ -208,7 +208,7 @@
 
   function captureMetaMap(value) {
     const input = value && typeof value === "object" ? value : {};
-    return { schemaVersion: 2, storageSchemaVersion: 2, profile: Trust.safeProfile(input.profile),
+    return { schemaVersion: 2, storageSchemaVersion: 3, profile: Trust.safeProfile(input.profile),
       reports: input.reports && typeof input.reports === "object" ? { ...input.reports } : {},
       updatedAt: String(input.updatedAt || new Date(0).toISOString()) };
   }
@@ -226,9 +226,9 @@
     const captureMeta = Trust.captureMetaForCommit(stage.review, normalizedDecision);
     metadata.reports[stage.runId] = { ...captureMeta, label: String(captureMeta.label || ""), note: String(captureMeta.note || "") };
     metadata.updatedAt = new Date().toISOString();
-    const snapshot = { ...stage.snapshot, storageSchemaVersion: 2, captureMeta,
+    const snapshot = { ...stage.snapshot, storageSchemaVersion: 3, captureMeta,
       updatedAt: stage.capturedAt, runId: stage.runId, reportId: stage.runId };
-    const profileMeta = { schemaVersion: 2, storageSchemaVersion: 2, profile: stage.profile,
+    const profileMeta = { schemaVersion: 2, storageSchemaVersion: 3, profile: stage.profile,
       label: String(stored[keys.profileMeta] && stored[keys.profileMeta].label || ""),
       archived: stored[keys.profileMeta] && stored[keys.profileMeta].archived === true,
       profileId: String(stage.profileId || stored[keys.profileMeta] && stored[keys.profileMeta].profileId || ""),
@@ -265,7 +265,7 @@
       captureMetrics: merged.metrics,
       completeness: merged.completeness,
       importSummary: { schemaVersion: merged.schemaVersion, formats: merged.formats, parts: merged.parts.map((part) => ({
-        name: part.name, phase: part.phase, format: part.format, metrics: part.metrics, completeness: part.completeness,
+        name: part.name, sourcePath: part.sourcePath, phase: part.phase, format: part.format, metrics: part.metrics, completeness: part.completeness,
       })) },
       warnings: merged.warnings,
       capturedAt: settings.capturedAt || new Date().toISOString(),
