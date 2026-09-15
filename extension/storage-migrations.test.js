@@ -32,12 +32,53 @@ test("migra almacenamiento legado con backup verificable y versión raíz", asyn
     buildTimeline(snapshot) { return { profile: snapshot.profile, reports: [{ id: "baseline" }] }; },
   });
   assert.equal(result.fromVersion, 0);
-  assert.equal(storage.data.ft_storage_meta.schemaVersion, 2);
+  assert.equal(storage.data.ft_storage_meta.schemaVersion, 3);
+  assert.equal(storage.data.ft_settings.storageSchemaVersion, 3);
   assert.equal(storage.data.ft_settings.confirmRemovalsAfter, 3);
   assert.equal(storage.data.ft_settings.minRemovalConfidence, 0.95);
   assert.equal(storage.data.ft_cache_demo, undefined);
   assert.ok(storage.data.ft_timeline_demo);
   assert.equal(Migrations.validateBackup(storage.data.ft_storage_migration_backup), true);
+});
+
+test("migra identidades legacy por username a una única clave estable por ID", async () => {
+  const storage = adapter({
+    ft_settings: {},
+    ft_storage_meta: { schemaVersion: 2 },
+    ft_identity_demo: {
+      schemaVersion: 1,
+      profile: "demo",
+      records: {
+        "username:viejo": {
+          key: "username:viejo",
+          instagramUserId: "77",
+          canonicalUsername: "viejo",
+          currentUsername: "viejo",
+          previousUsernames: ["viejo"],
+          firstSeenAt: "2026-08-01T00:00:00Z",
+          lastSeenAt: "2026-08-10T00:00:00Z",
+        },
+        "id:77": {
+          key: "id:77",
+          instagramUserId: "77",
+          canonicalUsername: "viejo",
+          currentUsername: "nuevo",
+          previousUsernames: ["nuevo"],
+          firstSeenAt: "2026-08-01T00:00:00Z",
+          lastSeenAt: "2026-08-20T00:00:00Z",
+        },
+      },
+      aliases: { viejo: "username:viejo", nuevo: "id:77" },
+    },
+  });
+
+  const result = await Migrations.migrateStorage(storage, { now: "2026-09-15T00:00:00Z" });
+  assert.equal(result.fromVersion, 2);
+  assert.deepEqual(Object.keys(storage.data.ft_identity_demo.records), ["id:77"]);
+  assert.equal(storage.data.ft_identity_demo.records["id:77"].currentUsername, "nuevo");
+  assert.deepEqual(storage.data.ft_identity_demo.records["id:77"].previousUsernames.sort(), ["nuevo", "viejo"]);
+  assert.equal(storage.data.ft_identity_demo.aliases.viejo, "id:77");
+  assert.equal(storage.data.ft_identity_demo.aliases.nuevo, "id:77");
 });
 
 test("puede restaurar exactamente las claves tocadas por la migración", async () => {
