@@ -1,7 +1,7 @@
 importScripts(
   "follower-identity.js", "follower-imports.js", "follower-relations.js", "core-facade.js",
   "follower-history-model.js", "follower-history-engine.js", "follower-projections.js", "history-facade.js",
-  "history-guard.js", "history-quality.js", "storage-migrations.js"
+  "history-guard.js", "history-quality.js", "storage-identity-migration.js", "storage-migrations.js"
 );
 
 const HISTORY_PREFIX = "ft_history_";
