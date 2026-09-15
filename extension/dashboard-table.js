@@ -7,6 +7,8 @@
     "history-quality.js",
     "trust-core.js",
     "trust-domain-adapter.js",
+    "identity-registry-adapter.js",
+    "anomaly-confidence-adapter.js",
     "capture-store.js",
     "product-core.js",
     "maintenance.js",
