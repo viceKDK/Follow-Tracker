@@ -86,7 +86,8 @@ if (pkg && manifest) {
     (entry.css || []).forEach((file) => requireExtension(file, `content_scripts[${index}].css`));
     requireOrdered(js, [
       "follower-identity.js", "follower-imports.js", "follower-relations.js", "core-facade.js",
-      "trust-core.js", "trust-domain-adapter.js", "capture-store.js",
+      "trust-core.js", "trust-domain-adapter.js", "identity-registry-adapter.js", "anomaly-confidence-adapter.js",
+      "capture-store.js", "instagram-api.js", "instagram-selector-adapter.js", "instagram-ui.js",
     ], `content_scripts[${index}].js`);
   });
 }
@@ -98,7 +99,8 @@ const runtime = [
   "follower-history-model.js", "follower-history-engine.js", "follower-projections.js", "history-facade.js", "history.js",
   "history-guard.js", "history-quality.js", "maintenance.js", "platform-storage.js", "storage-migrations.js", "dashboard-runtime.js",
   "dashboard-projection.js", "relationship-core.js", "admin-core.js", "product-core.js", "product-guidance.js", "trust-core.js",
-  "trust-domain-adapter.js", "capture-store.js", "instagram-api.js", "instagram-ui.js", "analysis-overlay.js",
+  "trust-domain-adapter.js", "identity-registry-adapter.js", "anomaly-confidence-adapter.js", "capture-store.js",
+  "instagram-api.js", "instagram-selector-adapter.js", "instagram-ui.js", "analysis-overlay.js",
   "analysis-controller.js", "content-entry.js", "dashboard.js", "dashboard-table.js", "dashboard-ux.js",
   "dashboard-product.js", "dashboard-maintenance.js", "dashboard-backup.js", "dashboard-identity.js",
   "dashboard-admin.js", "dashboard-integrity.js", "dashboard-guidance.js", "dashboard.css", "dashboard-table.css",
@@ -141,7 +143,7 @@ if (/\bCONTENT_FILES\b|chrome\.scripting|executeScript\s*\(/.test(backgroundSour
 const dashboardHtmlSource = fs.readFileSync(path.join(extensionDir, "dashboard.html"), "utf8");
 requireSourceOrder(dashboardHtmlSource, ["dashboard-runtime.js", "relationship-core.js", "dashboard-projection.js", "dashboard.js", "dashboard-table.js"], "dashboard.html");
 const dashboardLoader = fs.readFileSync(path.join(extensionDir, "dashboard-table.js"), "utf8");
-requireSourceOrder(dashboardLoader, ["trust-core.js", "trust-domain-adapter.js", "capture-store.js", "dashboard-ux.js"], "dashboard-table.js");
+requireSourceOrder(dashboardLoader, ["trust-core.js", "trust-domain-adapter.js", "identity-registry-adapter.js", "anomaly-confidence-adapter.js", "capture-store.js", "dashboard-ux.js"], "dashboard-table.js");
 if (dashboardLoader.includes('"dashboard-projection.js"')) fail("dashboard-table.js no debe cargar dashboard-projection.js: es una dependencia base declarada en dashboard.html");
 
 const coreBootstrap = fs.readFileSync(path.join(extensionDir, "core.js"), "utf8");
@@ -171,5 +173,5 @@ if (failures.length) {
 } else {
   console.log(`Extensión válida: Manifest V3, versión ${manifest && manifest.version}, ${checked.size} referencias locales verificadas.`);
   console.log("Permisos mínimos validados: activeTab + storage, sin scripting ni unlimitedStorage.");
-  console.log("Orden de carga del dominio canónico y migraciones versionadas validado.");
+  console.log("Orden de carga del dominio canónico, adapters de integridad y migraciones versionadas validado.");
 }
