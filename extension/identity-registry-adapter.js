@@ -55,6 +55,12 @@
     return Object.keys(registry.records).find((key) => Trust.normalizeInstagramId(registry.records[key]) === instagramUserId) || "";
   }
 
+  function aliasCanMergeWithId(registry, aliasKey, instagramUserId) {
+    if (!aliasKey || !registry.records[aliasKey]) return true;
+    const aliasId = Trust.normalizeInstagramId(registry.records[aliasKey]);
+    return !aliasId || !instagramUserId || aliasId === instagramUserId;
+  }
+
   function consolidateRecord(registry, fromKey, toKey, observedAt, source) {
     if (!fromKey || fromKey === toKey || !registry.records[fromKey]) return registry.records[toKey] || null;
     const incoming = registry.records[fromKey];
@@ -74,6 +80,7 @@
     const registry = Trust.normalizeIdentityRegistry(existingValue, profile);
     registry.schemaVersion = IDENTITY_SCHEMA_VERSION;
     const renames = [];
+    const conflicts = [];
     const resolved = [];
 
     Trust.uniqueUsers(rows, settings.source).forEach((user) => {
@@ -84,7 +91,20 @@
 
       if (idKey) {
         if (legacyIdKey && legacyIdKey !== idKey) consolidateRecord(registry, legacyIdKey, idKey, observedAt, user.source);
-        if (aliasKey && aliasKey !== idKey && registry.records[aliasKey]) consolidateRecord(registry, aliasKey, idKey, observedAt, user.source);
+        if (aliasKey && aliasKey !== idKey && registry.records[aliasKey]) {
+          if (aliasCanMergeWithId(registry, aliasKey, user.instagramUserId)) {
+            consolidateRecord(registry, aliasKey, idKey, observedAt, user.source);
+          } else {
+            conflicts.push({
+              type: "username_reused_by_different_id",
+              username: user.username,
+              incomingIdentityKey: idKey,
+              incomingInstagramUserId: user.instagramUserId,
+              existingIdentityKey: aliasKey,
+              existingInstagramUserId: Trust.normalizeInstagramId(registry.records[aliasKey]),
+            });
+          }
+        }
         key = idKey;
       }
 
@@ -124,7 +144,7 @@
 
     registry.profile = profile;
     registry.updatedAt = observedAt;
-    return { registry, resolved, renames };
+    return { registry, resolved, renames, conflicts };
   }
 
   function canonicalizeRelationshipLists(existingRegistry, followersRows, followingRows, options) {
@@ -152,6 +172,7 @@
     return {
       registry: updated.registry,
       renames: updated.renames,
+      conflicts: updated.conflicts,
       followers,
       following,
       followerUsernames: [...new Set(followers.map((user) => user.canonicalUsername))].sort(),
@@ -163,6 +184,6 @@
     };
   }
 
-  Object.assign(Trust, { IDENTITY_SCHEMA_VERSION, canonicalizeRelationshipLists, updateIdentityRegistry });
+  Object.assign(Trust, { IDENTITY_SCHEMA_VERSION, aliasCanMergeWithId, canonicalizeRelationshipLists, updateIdentityRegistry });
   return Trust;
 });
