@@ -208,7 +208,9 @@ async function startOrOpenInstagram() {
   }
 
   const button = document.querySelector("#analyze-button");
+  const selector = document.querySelector("#saved-profile-select");
   button.disabled = true;
+  selector.disabled = true;
   button.querySelector("strong").textContent = selectedPending ? "Abriendo revisión…" : "Iniciando captura…";
   showMessage("");
   try {
@@ -224,10 +226,10 @@ async function startOrOpenInstagram() {
     }
     window.close();
   } catch (error) {
-    button.disabled = false;
-    showMessage(error && error.message || "No se pudo abrir Follow Tracker. Probá recargar Instagram.");
     await renderSelectedProfile();
     showMessage(error && error.message || "No se pudo iniciar el análisis.");
+  } finally {
+    selector.disabled = false;
   }
 }
 
