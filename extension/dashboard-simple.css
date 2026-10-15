@@ -99,6 +99,21 @@
 #guidance-steps > summary:focus-visible,
 #empty-state .empty-journey:focus-visible { outline: 3px solid rgba(99,91,255,.24); outline-offset: 2px; }
 
+/* Type sizes remain comfortable without expanding the entire dashboard. */
+.dashboard-polished #people .people-current-table,
+.dashboard-polished #activity .activity-table { font-size: 12px; }
+.dashboard-polished #people .people-current-table :is(td,th),
+.dashboard-polished #activity .activity-table :is(td,th) { line-height: 1.45; }
+.dashboard-polished #people .people-current-table tbody strong,
+.dashboard-polished #activity .activity-table tbody strong { font-size: 12px; }
+.dashboard-polished #relationships .relationship-person-main strong { font-size: 13px; }
+.dashboard-polished #relationships .relationship-person-main small { font-size: 11px; line-height: 1.45; }
+#relationships .simple-range > summary:hover,
+#relationships .simple-filter-more > summary:hover,
+#people .simple-filter-more > summary:hover,
+#people-summary .people-extra-details > summary:hover,
+#guidance-steps > summary:hover { color: var(--ft-brand-active, #4338ca); background: var(--ft-brand-soft, #f0efff); }
+
 @media (max-width: 1150px) {
   .dashboard-polished #activity-controls.activity-controls { grid-template-columns: minmax(180px, 1fr) auto; }
   #activity-controls .activity-quick-filters { grid-column: 2; }
