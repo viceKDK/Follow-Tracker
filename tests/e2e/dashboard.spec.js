@@ -364,7 +364,8 @@ test("Actividad combina filtros, pagina y exporta solamente las coincidencias", 
 });
 
 test("Recientes distingue nuevas detecciones, seguidores y seguidos", async ({ page }) => {
-  const pageErrors = await openDashboard(page, "recent");
+  const pageErrors = await openDashboard(page, "overview");
+  await page.locator(".overview-recent-link").click();
   await expect(page.locator("#recent")).toBeVisible();
   await expect(page.locator("#recent-list .recent-person")).toHaveCount(2);
   await expect(page.locator("#recent-list .recent-person").first()).toContainText("@eva");
