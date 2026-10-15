@@ -4,6 +4,7 @@ const Core = globalThis.FollowTrackerCore;
 const History = globalThis.FollowTrackerHistory;
 const Trust = globalThis.FollowTrackerTrust;
 const PopupCore = globalThis.FollowTrackerPopupCore;
+const LAST_PROFILE_KEY = "ft_popup_last_profile";
 
 if (!Core || !History || !Trust || !PopupCore) {
   throw new Error("Follow Tracker Popup no pudo cargar sus dependencias.");
@@ -236,13 +237,18 @@ async function initialize() {
   activeTab = tabs[0] || null;
   activeTabProfile = PopupCore.profileFromUrl(activeTab && activeTab.url);
   storedProfiles = await discoverSavedProfiles();
-  selectedProfile = activeTabProfile || storedProfiles[0] || "";
+  const last = await getStorage([LAST_PROFILE_KEY]);
+  const preferred = PopupCore.cleanProfile(last[LAST_PROFILE_KEY]);
+  selectedProfile = activeTabProfile || (storedProfiles.includes(preferred) ? preferred : storedProfiles[0]) || "";
   createProfilePicker();
   await renderSelectedProfile();
 }
 
 document.querySelector("#saved-profile-select").addEventListener("change", (event) => {
   selectedProfile = PopupCore.cleanProfile(event.target.value);
+  if (selectedProfile) chrome.storage.local.set({ [LAST_PROFILE_KEY]: selectedProfile }, () => {
+    if (chrome.runtime.lastError) console.warn("No se pudo recordar el último perfil.");
+  });
   renderSelectedProfile().catch((error) => showMessage(error.message || String(error)));
 });
 
