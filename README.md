@@ -134,6 +134,18 @@ Desde el dashboard, abrí **Recientes**. Alterná entre **Seguidores** y **Segui
 
 **Importante:** la fecha del reporte representa cuándo se observó el cambio, no la fecha exacta del follow. Los usuarios que ya estaban en la primera captura se muestran sin fecha verificable; Instagram no garantiza el orden cronológico de estas listas para cualquier perfil. El explorador no añade solicitudes, almacenamiento ni permisos. [Ver alcance de esta función](docs/RECENT-VIEW.md).
 
+## Panel más fácil de usar
+
+El panel está organizado para que no necesites conocer términos técnicos:
+
+1. **Analizá un perfil** desde Instagram y revisá la captura antes de guardarla.
+2. **Repetí el análisis** en otro momento para que haya un antes y un después.
+3. **Explorá los resultados**: en **Recientes** podés consultar cuentas detectadas; en **Antes y ahora**, comparar fechas; en **Personas**, revisar relaciones; y en **Actividad**, ver movimientos históricos.
+
+La pantalla **Antes y ahora** ofrece comparaciones rápidas y mantiene la selección manual de fechas en **Elegir otras fechas**. En **Personas**, las estadísticas secundarias y categorías menos usadas se despliegan bajo demanda. **Actividad** incluye botones directos para ver quién te siguió o quién te dejó de seguir, sin perder filtros por reporte/fecha ni CSV.
+
+El panel utiliza el historial local guardado. La guía no realiza capturas automáticamente, y los cambios siguen sujetos a las comprobaciones existentes de calidad. Los movimientos se atribuyen a la captura que los detectó, no al instante real de Instagram.
+
 ## Cómo protege el historial
 
 Una captura nueva no reemplaza automáticamente el último estado válido: primero queda pendiente de revisión.
