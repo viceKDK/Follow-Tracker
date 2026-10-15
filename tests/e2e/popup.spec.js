@@ -65,6 +65,7 @@ async function installPopupMocks(page, { tabUrl = "https://example.com/", storag
       },
       storage: {
         local: {
+          set: (values, callback) => { Object.assign(data, values); if (callback) callback(); },
           get: (keys, callback) => {
             reads.push(keys);
             if (keys == null) return callback({ ...data });
@@ -120,6 +121,17 @@ test("fuera de Instagram permite elegir datos guardados y abrir cada resultado",
   await expect.poll(() => page.evaluate(() => globalThis.__popupTest.opened.length)).toBe(5);
   expect((await page.evaluate(() => globalThis.__popupTest.opened.at(-1)))).toBe("https://www.instagram.com/martin/");
   expect(await page.evaluate(() => globalThis.__popupTest.messages)).toEqual([]);
+});
+
+test("recuerda el último perfil seleccionado y prioriza la pestaña activa", async ({ page }) => {
+  const storage = { ...savedHistory(), ft_popup_last_profile: "martin" };
+  await installPopupMocks(page, { storage });
+  await page.goto(popupUrl);
+  await expect(page.locator("#saved-profile-select")).toHaveValue("martin");
+  await page.locator("#saved-profile-select").selectOption("ana");
+  await expect(page.locator("#reports-count")).toHaveText("2");
+  const remembered = await page.evaluate(() => globalThis.__popupTest.data.ft_popup_last_profile);
+  expect(remembered).toBe("ana");
 });
 
 test("con storage.getKeys no carga todo el historial al abrir el popup", async ({ page }) => {
