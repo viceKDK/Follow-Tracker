@@ -3,7 +3,7 @@
 #recent .recent-intro {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
   padding: 17px 20px; border: 1px solid var(--ft-border, #e4e7ec);
-  border-radius: 16px; background: linear-gradient(115deg, #f2f0ff, #fff 66%);
+  border-radius: 16px; background: #f7f5ff;
 }
 #recent .recent-intro strong { display: block; color: var(--ft-text, #182230); font-size: 15px; }
 #recent .recent-intro p { margin: 4px 0 0; max-width: 760px; color: var(--ft-text-secondary, #667085); font-size: 13px; line-height: 1.6; }
