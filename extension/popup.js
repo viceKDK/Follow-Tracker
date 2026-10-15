@@ -31,6 +31,24 @@ function getStorage(keys) {
   });
 }
 
+async function discoverSavedProfiles() {
+  // getKeys() is supported by recent Chromium versions. Read small metadata
+  // only; snapshots and timelines can be large when there are many followers.
+  if (typeof chrome.storage.local.getKeys === "function") {
+    try {
+      const keys = await chrome.storage.local.getKeys();
+      if (Array.isArray(keys)) {
+        const profileMetaKeys = keys.filter((key) => typeof key === "string" && key.startsWith("ft_profile_meta_"));
+        const metadata = profileMetaKeys.length ? await getStorage(profileMetaKeys) : {};
+        return PopupCore.savedProfilesFromKeys(keys, metadata);
+      }
+    } catch (_error) {
+      // Fall back on older browsers without promise-based getKeys().
+    }
+  }
+  return PopupCore.savedProfiles(await getStorage(null));
+}
+
 function showMessage(text) {
   const element = document.querySelector("#message");
   element.textContent = String(text || "");
@@ -217,8 +235,7 @@ async function initialize() {
   try { tabs = await chrome.tabs.query({ active: true, currentWindow: true }); } catch (_error) {}
   activeTab = tabs[0] || null;
   activeTabProfile = PopupCore.profileFromUrl(activeTab && activeTab.url);
-  const allStorage = await getStorage(null);
-  storedProfiles = PopupCore.savedProfiles(allStorage);
+  storedProfiles = await discoverSavedProfiles();
   selectedProfile = activeTabProfile || storedProfiles[0] || "";
   createProfilePicker();
   await renderSelectedProfile();
