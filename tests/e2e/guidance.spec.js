@@ -101,6 +101,10 @@ test("con una sola captura recomienda crear la comparación", async ({ page }) =
   await expect(page.locator("#guidance-panel")).toBeVisible();
   await expect(page.locator("#guidance-primary")).toHaveText("Hacé una segunda captura");
   await expect(page.locator("#guidance-progress-value")).toHaveText("1/3");
+  await expect(page.locator("#guidance-steps")).toHaveAttribute("open", "");
+  await expect(page.locator("#guidance-steps [data-journey-step]")).toHaveCount(3);
+  await expect(page.locator('[data-journey-step="1"] .guidance-step-status')).toHaveText("Listo");
+  await expect(page.locator('[data-journey-step="2"] .guidance-step-status')).toHaveText("Por hacer");
 });
 
 test("una captura pendiente siempre queda por encima de acciones secundarias", async ({ page }) => {
@@ -114,6 +118,9 @@ test("con historial sano lleva a Antes y ahora", async ({ page }) => {
   await installMocks(page, seed({ reports: 2 }));
   await page.goto(`${dashboardUrl}?profile=guidance_demo#overview`);
   await expect(page.locator("#guidance-primary")).toContainText("Revisá 1 cambio reciente");
+  await expect(page.locator("#guidance-steps")).not.toHaveAttribute("open", "");
+  await page.locator("#guidance-steps > summary").click();
+  await expect(page.locator('[data-journey-step="3"] .guidance-step-status')).toHaveText("Disponible");
   await page.locator("#guidance-primary").click();
   await expect(page.locator("#relationships")).toBeVisible();
   await expect(page.locator('[data-view="relationships"]')).toHaveAttribute("aria-selected", "true");
