@@ -363,6 +363,33 @@ test("Actividad combina filtros, pagina y exporta solamente las coincidencias", 
   expect(pageErrors).toEqual([]);
 });
 
+test("Recientes distingue nuevas detecciones, seguidores y seguidos", async ({ page }) => {
+  const pageErrors = await openDashboard(page, "recent");
+  await expect(page.locator("#recent")).toBeVisible();
+  await expect(page.locator("#recent-list .recent-person")).toHaveCount(2);
+  await expect(page.locator("#recent-list .recent-person").first()).toContainText("@eva");
+  await expect(page.locator("#recent-list .recent-person").nth(1)).toContainText("@carla");
+
+  await page.locator("#recent-scope").selectOption("latest");
+  await expect(page.locator("#recent-list .recent-person")).toHaveCount(1);
+  await expect(page.locator("#recent-list .recent-person")).toContainText("@eva");
+
+  await page.locator('[data-recent-kind="following"]').click();
+  await page.locator("#recent-scope").selectOption("all");
+  await page.locator("#recent-sort").selectOption("name");
+  await expect(page.locator("#recent-list .recent-person")).toHaveCount(3);
+  await expect(page.locator("#recent-list .recent-person").first()).toContainText("@ana");
+  await expect(page.locator("#recent-list .recent-person").first()).toContainText("Fecha desconocida");
+
+  await page.locator("#recent-search").fill("@eva");
+  await expect(page.locator("#recent-list .recent-person")).toHaveCount(1);
+  await page.locator("#recent-list [data-recent-person]").click();
+  await expect(page.locator("#person-dialog")).toBeVisible();
+  await expect(page.locator("#dialog-username")).toHaveText("@eva");
+  await page.locator("#dialog-close").click();
+  expect(pageErrors).toEqual([]);
+});
+
 test("Personas prioriza el resumen visual y una tabla compacta", async ({ page }) => {
   const pageErrors = await openDashboard(page, "people");
   await page.locator('[data-view="people"]').click();
@@ -458,6 +485,7 @@ test("Resumen mantiene navegación legible y métricas compactas en escritorio",
 
   expect(layout.navLabels.map((item) => item.text)).toEqual([
     "Resumen",
+    "Recientes",
     "Antes y ahora",
     "Personas",
     "Actividad",
@@ -495,7 +523,7 @@ test("Navegación móvil permanece accesible y no tapa el contenido", async ({ p
     };
   });
   expect(mobile.sidebarBottom).toBe(mobile.viewportHeight);
-  expect(mobile.navCount).toBe(5);
+  expect(mobile.navCount).toBe(6);
   expect(mobile.minTarget).toBeGreaterThanOrEqual(40);
   expect(mobile.overflow).toBe(false);
   expect(pageErrors).toEqual([]);
