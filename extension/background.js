@@ -150,6 +150,28 @@ function openDashboardTab(profile, hash) {
   chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${query}${targetHash}`) });
 }
 
+function selectPostCaptureView(profile, message, done) {
+  const meta = message && message.captureMeta;
+  if (!meta || meta.status !== "trusted" || !message.reportId) {
+    done("overview");
+    return;
+  }
+  const safe = FollowTrackerCore.safeProfile(profile);
+  chrome.storage.local.get([`ft_timeline_${safe}`], (items) => {
+    if (chrome.runtime.lastError) { done("overview"); return; }
+    const timeline = items && items[`ft_timeline_${safe}`];
+    const reports = timeline && timeline.reports;
+    if (!Array.isArray(reports) || reports.length < 2) { done("overview"); return; }
+    const latest = reports[reports.length - 1];
+    if (!latest || String(latest.id) !== String(message.reportId)) { done("overview"); return; }
+    const changes = latest.changes || {};
+    const count = (key) => Array.isArray(changes[key]) ? changes[key].length : 0;
+    if (count("newFollowers") || count("newFollowing")) done("recent");
+    else if (count("lostFollowers") || count("lostFollowing")) done("relationships");
+    else done("overview");
+  });
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return undefined;
   if (message.type === "START_FROM_POPUP") {
@@ -177,7 +199,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender && sender.tab && sender.tab.id;
     if (message.type === "capture-saved") {
       const targetProfile = message.profile || profileFromTabUrl(sender && sender.tab && sender.tab.url);
-      setTimeout(() => openDashboardTab(targetProfile, "overview"), 350);
+      setTimeout(() => selectPostCaptureView(targetProfile, message, (view) => openDashboardTab(targetProfile, view)), 350);
     }
     if (message.type === "legacy-report-suppressed") {
       const targetProfile = message.profile || profileFromTabUrl(sender && sender.tab && sender.tab.url);
