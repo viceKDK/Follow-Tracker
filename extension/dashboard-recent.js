@@ -8,7 +8,7 @@
   if (!root) return;
 
   Runtime.registerView("recent");
-  const ui = { kind: "followers", scope: "detected", sort: "newest", query: "", limit: 36, projection: null, index: null };
+  const ui = { kind: "followers", scope: "all", sort: "newest", query: "", limit: 36, projection: null, index: null };
   const elements = {
     list: root.querySelector("#recent-list"),
     message: root.querySelector("#recent-message"),
