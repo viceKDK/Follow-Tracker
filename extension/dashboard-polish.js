@@ -8,6 +8,12 @@
       description: "Tu panorama actual y la evolución del perfil.",
       icon: "dashboard",
     },
+    recent: {
+      label: "Recientes",
+      kicker: "Explorar",
+      description: "Seguidores y seguidos según su fecha detectada.",
+      icon: "activity",
+    },
     relationships: {
       label: "Antes y ahora",
       kicker: "Comparación",
