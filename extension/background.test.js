@@ -74,6 +74,37 @@ test("abre el dashboard después de guardar una captura revisada", async () => {
   assert.equal(harness.createdTabs[0].url, "chrome-extension://follow-tracker/dashboard.html?profile=demo_profile#overview");
 });
 
+test("abre Recientes cuando una captura confiable detecta seguidores nuevos", async () => {
+  const first = { profile: "demo_profile", followers: ["ana"], following: ["ana"], updatedAt: "2026-08-20T10:00:00Z", runId: "r1" };
+  const second = { profile: "demo_profile", followers: ["ana", "beto"], following: ["ana"], updatedAt: "2026-08-21T10:00:00Z", runId: "r2" };
+  const History = require("./history.js");
+  const timeline = History.appendSnapshot(History.appendSnapshot(null, null, first), first, second);
+  const harness = createHarness({ seed: { ft_timeline_demo_profile: timeline } });
+  await dispatch(harness, {
+    source: "content", type: "capture-saved", profile: "demo_profile",
+    reportId: "r2", captureMeta: { status: "trusted" },
+  }, { tab: { id: 7 } });
+  await new Promise((resolve) => setTimeout(resolve, 390));
+  assert.equal(harness.createdTabs[0].url, "chrome-extension://follow-tracker/dashboard.html?profile=demo_profile#recent");
+});
+
+test("abre la comparación para bajas y no saltea alertas de calidad", async () => {
+  const first = { profile: "demo_profile", followers: ["ana", "beto"], following: ["ana"], updatedAt: "2026-08-20T10:00:00Z", runId: "r1" };
+  const second = { profile: "demo_profile", followers: ["ana"], following: ["ana"], updatedAt: "2026-08-21T10:00:00Z", runId: "r2" };
+  const History = require("./history.js");
+  const timeline = History.appendSnapshot(History.appendSnapshot(null, null, first), first, second);
+  const message = { source: "content", type: "capture-saved", profile: "demo_profile", reportId: "r2", captureMeta: { status: "trusted" } };
+  const harness = createHarness({ seed: { ft_timeline_demo_profile: timeline } });
+  await dispatch(harness, message, { tab: { id: 7 } });
+  await new Promise((resolve) => setTimeout(resolve, 390));
+  assert.equal(harness.createdTabs[0].url, "chrome-extension://follow-tracker/dashboard.html?profile=demo_profile#relationships");
+
+  const suspicious = createHarness({ seed: { ft_timeline_demo_profile: timeline } });
+  await dispatch(suspicious, { ...message, captureMeta: { status: "suspicious" } }, { tab: { id: 7 } });
+  await new Promise((resolve) => setTimeout(resolve, 390));
+  assert.equal(suspicious.createdTabs[0].url, "chrome-extension://follow-tracker/dashboard.html?profile=demo_profile#overview");
+});
+
 test("el popup recibe confirmación sin esperar el análisis completo", async () => {
   const harness = createHarness();
   const response = await dispatch(harness, { type: "START_FROM_POPUP", tabId: 22 }, { tab: { id: 22 } });
