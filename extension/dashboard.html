@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="design-tokens.css" />
     <link rel="stylesheet" href="dashboard.css" />
     <link rel="stylesheet" href="dashboard-table.css" />
+    <link rel="stylesheet" href="dashboard-recent.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -22,6 +23,9 @@
         <nav class="main-nav" aria-label="Secciones del dashboard" role="tablist">
           <button class="nav-item active" data-view="overview" type="button" role="tab" aria-selected="true">
             <span aria-hidden="true">⌂</span> Resumen
+          </button>
+          <button class="nav-item" data-view="recent" type="button" role="tab" aria-selected="false">
+            <span aria-hidden="true">✦</span> Recientes
           </button>
           <button class="nav-item" data-view="relationships" type="button" role="tab" aria-selected="false">
             <span aria-hidden="true">⇆</span> Antes y ahora
@@ -173,6 +177,64 @@
                 </div>
                 <button id="delete-profile" class="button button-danger" type="button">Borrar historial de este perfil</button>
               </section>
+            </section>
+
+            <section id="recent" class="view-panel" data-view-panel="recent" role="tabpanel" hidden>
+              <div class="section-hero">
+                <div>
+                  <p class="eyebrow">PERSONAS Y NOVEDADES</p>
+                  <h1>Últimos seguidores y seguidos</h1>
+                  <p>Encontrá las nuevas cuentas detectadas en tus reportes sin navegar por estadísticas.</p>
+                </div>
+              </div>
+              <div class="recent-layout">
+                <aside class="recent-intro">
+                  <div>
+                    <strong>Cómo leer estas fechas</strong>
+                    <p>«Detectado» significa que una cuenta apareció en un reporte. No indica la hora exacta del follow. Las cuentas presentes en la primera captura no tienen un orden cronológico verificable.</p>
+                  </div>
+                  <span class="recent-intro-icon" aria-hidden="true">i</span>
+                </aside>
+                <article class="panel recent-browser">
+                  <div class="recent-browser-head">
+                    <div>
+                      <h2>Explorador de cuentas</h2>
+                      <p id="recent-report">Cargando capturas...</p>
+                    </div>
+                  </div>
+                  <div class="recent-switch" role="group" aria-label="Tipo de relación">
+                    <button type="button" class="active" data-recent-kind="followers" aria-pressed="true">Seguidores <span class="recent-segment-count">0</span></button>
+                    <button type="button" data-recent-kind="following" aria-pressed="false">Seguidos <span class="recent-segment-count">0</span></button>
+                  </div>
+                  <div class="recent-tools">
+                    <label>Buscar cuenta
+                      <input id="recent-search" type="search" placeholder="@usuario" autocomplete="off" />
+                    </label>
+                    <label>Mostrar
+                      <select id="recent-scope">
+                        <option value="detected">Detectados después</option>
+                        <option value="latest">Nuevos en último reporte</option>
+                        <option value="all">Todas las cuentas</option>
+                      </select>
+                    </label>
+                    <label>Ordenar por
+                      <select id="recent-sort">
+                        <option value="newest">Detección más reciente</option>
+                        <option value="oldest">Detección más antigua</option>
+                        <option value="name">Nombre A–Z</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="recent-results-head">
+                    <span id="recent-count" aria-live="polite">0 cuentas</span>
+                    <span id="recent-message"></span>
+                  </div>
+                  <div id="recent-list" class="recent-list"></div>
+                  <div class="recent-pagination">
+                    <button id="recent-more" type="button" hidden>Ver más cuentas</button>
+                  </div>
+                </article>
+              </div>
             </section>
 
             <section id="relationships" class="view-panel" data-view-panel="relationships" role="tabpanel" hidden>
@@ -327,7 +389,9 @@
     <script src="relationship-core.js"></script>
     <script src="product-guidance.js"></script>
     <script src="dashboard-projection.js"></script>
+    <script src="recent-core.js"></script>
     <script src="dashboard.js"></script>
+    <script src="dashboard-recent.js"></script>
     <script src="dashboard-table.js"></script>
   </body>
 </html>
