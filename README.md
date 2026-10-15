@@ -134,6 +134,16 @@ Desde el dashboard, abrí **Recientes**. Alterná entre **Seguidores** y **Segui
 
 **Importante:** la fecha del reporte representa cuándo se observó el cambio, no la fecha exacta del follow. Los usuarios que ya estaban en la primera captura se muestran sin fecha verificable; Instagram no garantiza el orden cronológico de estas listas para cualquier perfil. El explorador no añade solicitudes, almacenamiento ni permisos. [Ver alcance de esta función](docs/RECENT-VIEW.md).
 
+## Popup: del perfil al resultado con menos pasos
+
+Al abrir Follow Tracker desde la barra de Chrome/Edge, podés elegir cualquier perfil ya guardado —incluso si estás navegando por otra página— y ver sus estadísticas, fecha de última captura y estado de revisión. Desde ahí tenés accesos directos a **Resumen**, **Recientes**, **Cambios** y **Actividad**, sin buscar esas pantallas dentro del dashboard.
+
+El botón principal se adapta: **Hacer primera captura**, **Actualizar captura**, **Continuar revisión** o **Abrir perfil en Instagram**. Una captura nueva **no se guarda automáticamente desde el popup**: sigue el proceso existente de revisión y las políticas de calidad.
+
+Cuando se guarda un reporte confiable, el dashboard puede abrir directamente la vista de nuevas relaciones detectadas o la comparación de bajas. Si falta evidencia, abre el Resumen y explica qué hacer.
+
+La selección de perfiles usa un recorrido liviano por las claves del almacenamiento en navegadores Chromium modernos, con una alternativa compatible para navegadores anteriores. Más detalles y pruebas en [docs/POPUP-WORKFLOW.md](docs/POPUP-WORKFLOW.md).
+
 ## Panel más fácil de usar
 
 El panel está organizado para que no necesites conocer términos técnicos:
