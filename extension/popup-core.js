@@ -40,6 +40,23 @@
       .map(([name]) => name);
   }
 
+  // Modern Chrome exposes storage.getKeys(), avoiding a full read of large histories
+  // simply to populate the profile picker. Legacy browsers use savedProfiles().
+  function savedProfilesFromKeys(keys, metadata) {
+    const names = new Map();
+    for (const key of Array.isArray(keys) ? keys : []) {
+      if (typeof key !== "string" || !key.startsWith("ft_history_")) continue;
+      const profile = cleanProfile(key.slice("ft_history_".length));
+      if (!profile) continue;
+      const meta = metadata && metadata[`ft_profile_meta_${profile}`];
+      const date = Number(new Date(meta && (meta.lastCaptureAt || meta.updatedAt) || 0)) || 0;
+      names.set(profile, Math.max(names.get(profile) || 0, date));
+    }
+    return [...names.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name);
+  }
+
   function journey(reportCount, pending, qualityStatus) {
     const count = Math.max(0, Number(reportCount) || 0);
     if (!count) return { step: 0, label: pending ? "Revisá tu primera captura" : "Creá tu primera captura" };
@@ -51,5 +68,5 @@
     return { step: 3, label: "Historial listo para explorar" };
   }
 
-  return { cleanProfile, profileFromUrl, savedProfiles, journey };
+  return { cleanProfile, profileFromUrl, savedProfiles, savedProfilesFromKeys, journey };
 });
