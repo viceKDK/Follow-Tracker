@@ -19,6 +19,10 @@
       </header>
 
       <section class="profile-card" aria-live="polite">
+        <div id="saved-profile-picker" class="saved-profile-picker" hidden>
+          <label for="saved-profile-select">Perfil guardado</label>
+          <select id="saved-profile-select" aria-label="Elegir perfil guardado"></select>
+        </div>
         <div class="profile-topline">
           <div>
             <p class="label">Perfil actual</p>
@@ -46,38 +50,54 @@
         <div id="pending-summary" class="pending-summary" hidden>
           Hay una captura esperando que la guardes o descartes en Instagram.
         </div>
+        <div id="capture-progress" class="capture-progress" hidden>
+          <div><span id="capture-progress-label">Preparando el historial</span><strong id="capture-progress-value">0/3</strong></div>
+          <div class="capture-progress-track" aria-hidden="true"><span id="capture-progress-bar"></span></div>
+        </div>
       </section>
 
       <button id="analyze-button" class="button button-primary" type="button" disabled>
         <span class="button-icon" aria-hidden="true">↻</span>
         <span>
-          <strong>Analizar perfil actual</strong>
-          <small>Recolecta los datos y te deja revisarlos antes de guardar</small>
+          <strong>Preparar análisis</strong>
+          <small>Primero se capturan los datos y luego revisás el resultado</small>
         </span>
       </button>
 
-      <button id="dashboard-button" class="button button-secondary" type="button">
-        <span class="button-icon" aria-hidden="true">⇆</span>
-        <span>
-          <strong>Ver antes y ahora</strong>
-          <small>Compará reportes, personas, notas y actividad</small>
-        </span>
-        <span aria-hidden="true">→</span>
-      </button>
+      <div class="results-section">
+        <p class="results-heading">TUS RESULTADOS</p>
+        <button id="dashboard-button" class="button button-secondary" type="button">
+          <span class="button-icon" aria-hidden="true">⌂</span>
+          <span>
+            <strong>Abrir mi resumen</strong>
+            <small>Estadísticas y próximos pasos</small>
+          </span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <div class="quick-links" role="group" aria-label="Accesos rápidos a resultados">
+          <button id="recent-button" type="button"><span aria-hidden="true">↗</span> Recientes</button>
+          <button id="changes-button" type="button"><span aria-hidden="true">⇆</span> Cambios</button>
+          <button id="activity-button" type="button"><span aria-hidden="true">◷</span> Actividad</button>
+        </div>
+      </div>
 
-      <button id="admin-button" class="button button-secondary button-compact" type="button">
-        <span class="button-icon" aria-hidden="true">⚙</span>
-        <span>
-          <strong>Administrar datos</strong>
-          <small>Importar archivos oficiales, backups y reportes</small>
-        </span>
-        <span aria-hidden="true">→</span>
-      </button>
+      <details class="popup-advanced" id="popup-advanced">
+        <summary>Opciones y administración</summary>
+        <button id="admin-button" class="button button-secondary button-compact" type="button">
+          <span class="button-icon" aria-hidden="true">⚙</span>
+          <span>
+            <strong>Administrar datos</strong>
+            <small>Archivos oficiales, backups y reportes</small>
+          </span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <p class="popup-privacy">Los datos se guardan en este navegador. Ninguna captura se envía a servidores de Follow Tracker.</p>
+      </details>
 
       <div id="message" class="message" hidden></div>
 
       <footer>
-        <span>Todo se guarda localmente.</span>
+        <span>Datos locales · No modifica Instagram</span>
         <button id="open-instagram" class="text-button" type="button">Abrir Instagram</button>
       </footer>
     </main>
