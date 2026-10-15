@@ -5,6 +5,7 @@
   const Runtime = globalThis.FollowTrackerDashboardRuntime;
   const Storage = globalThis.FollowTrackerStorage;
   const Trust = globalThis.FollowTrackerTrust;
+  let initialJourneyProfile = null;
   if (!Guidance || !Runtime || !Storage || !Trust) {
     throw new Error("Follow Tracker Guidance no pudo cargar sus dependencias.");
   }
@@ -27,6 +28,14 @@
           <div><span id="guidance-progress-label">Preparando próximo paso…</span><strong id="guidance-progress-value">0/3</strong></div>
           <div class="guidance-progress-track" aria-hidden="true"><span id="guidance-progress-bar"></span></div>
         </div>
+        <details id="guidance-steps" class="guidance-steps">
+          <summary>Cómo usar Follow Tracker en 3 pasos</summary>
+          <ol>
+            <li data-journey-step="1"><span class="guidance-step-number">1</span><div><strong>Analizá un perfil</strong><small>Guardá la primera captura para conocer la situación inicial.</small></div><span class="guidance-step-status">Pendiente</span></li>
+            <li data-journey-step="2"><span class="guidance-step-number">2</span><div><strong>Repetí y revisá el análisis</strong><small>Una segunda captura confiable permite identificar qué cambió.</small></div><span class="guidance-step-status">Pendiente</span></li>
+            <li data-journey-step="3"><span class="guidance-step-number">3</span><div><strong>Explorá los resultados</strong><small>Abrí Recientes, Antes y ahora, Personas o Actividad.</small></div><span class="guidance-step-status">Pendiente</span></li>
+          </ol>
+        </details>
         <div class="guidance-head">
           <div><p class="panel-kicker">SIGUIENTE MEJOR ACCIÓN</p><h2 id="guidance-title">Qué conviene hacer ahora</h2><p id="guidance-summary"></p></div>
           <button id="guidance-primary" class="button button-primary" type="button"></button>
@@ -106,6 +115,23 @@
     if (!panel) return;
     const model = Guidance.buildGuidance(buildContext());
     const stage = model.stage;
+    const journey = document.querySelector("#guidance-steps");
+    if (journey && initialJourneyProfile !== state.profile) {
+      initialJourneyProfile = state.profile;
+      journey.open = model.context.reportCount < 2;
+    }
+    const ready = model.context.reportCount >= 2 && !model.context.pendingCapture
+      && !model.context.needsReview && !model.context.pendingAbsenceCount;
+    const statuses = [
+      model.context.reportCount > 0 ? "Listo" : "Por hacer",
+      ready ? "Listo" : model.context.reportCount >= 2 ? "Revisar" : "Por hacer",
+      ready ? "Disponible" : "Luego",
+    ];
+    document.querySelectorAll("[data-journey-step]").forEach((row, index) => {
+      row.dataset.status = statuses[index];
+      const label = row.querySelector(".guidance-step-status");
+      if (label) label.textContent = statuses[index];
+    });
     document.querySelector("#guidance-progress-label").textContent = stage.label;
     document.querySelector("#guidance-progress-value").textContent = `${stage.current}/${stage.total}`;
     document.querySelector("#guidance-progress-bar").style.width = `${Math.round(stage.current / stage.total * 100)}%`;
