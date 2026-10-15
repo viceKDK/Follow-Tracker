@@ -367,6 +367,8 @@ test("Recientes distingue nuevas detecciones, seguidores y seguidos", async ({ p
   const pageErrors = await openDashboard(page, "overview");
   await page.locator(".overview-recent-link").click();
   await expect(page.locator("#recent")).toBeVisible();
+  await expect(page.locator("#recent-list .recent-person")).toHaveCount(3);
+  await page.locator("#recent-scope").selectOption("detected");
   await expect(page.locator("#recent-list .recent-person")).toHaveCount(2);
   await expect(page.locator("#recent-list .recent-person").first()).toContainText("@eva");
   await expect(page.locator("#recent-list .recent-person").nth(1)).toContainText("@carla");
