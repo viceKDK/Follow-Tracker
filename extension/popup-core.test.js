@@ -47,6 +47,7 @@ test("la guía nunca marca como finalizada una captura pendiente o dudosa", () =
   assert.equal(Popup.journey(1, false).step, 1);
   assert.equal(Popup.journey(2, true, "trusted").step, 2);
   assert.equal(Popup.journey(3, false, "suspicious").step, 2);
+  assert.equal(Popup.journey(2, false).step, 2);
   assert.equal(Popup.journey(2, false, "trusted").step, 3);
   assert.equal(Popup.journey(1, true).step, 1);
   assert.equal(Popup.journey(0, true).step, 0);
