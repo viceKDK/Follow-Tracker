@@ -95,6 +95,14 @@ test.afterAll(async () => {
   if (server) await new Promise((resolve) => server.close(resolve));
 });
 
+test("sin capturas enseña los tres pasos sin pedir permisos nuevos", async ({ page }) => {
+  await installMocks(page, {});
+  await page.goto(`${dashboardUrl}#overview`);
+  await expect(page.locator("#empty-state")).toBeVisible();
+  await expect(page.locator("#empty-state .empty-journey li")).toHaveCount(3);
+  await expect(page.locator("#empty-open-instagram")).toBeVisible();
+});
+
 test("con una sola captura recomienda crear la comparación", async ({ page }) => {
   await installMocks(page, seed({ reports: 1 }));
   await page.goto(`${dashboardUrl}?profile=guidance_demo#overview`);
