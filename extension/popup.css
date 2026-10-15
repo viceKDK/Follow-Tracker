@@ -365,3 +365,71 @@ body :is(p, span, small, label, a) {
 body :is(button, strong, b, .eyebrow, .label, .profile-name, .state-pill, .text-button) {
   font-weight: var(--ft-weight-semibold);
 }
+
+
+/* Popup v3: simplified daily workflow with saved-profile access. */
+body { width: 398px; min-height: 0; font-size: 13px; }
+.popup-shell { padding: 18px; }
+.brand-row { margin-bottom: 14px; }
+.eyebrow { font-size: 10px; letter-spacing: .08em; }
+h1 { font-size: 23px; line-height: 1.15; }
+.profile-card { padding: 15px; margin-bottom: 12px; box-shadow: var(--ft-shadow-xs); }
+.profile-name { font-size: 19px; line-height: 1.3; }
+.profile-help { font-size: 12px; }
+.label, .state-pill, .mini-stats span { font-size: 11px; }
+.mini-stats strong { font-size: 22px; }
+.quality-summary strong { font-size: 12px; }
+.quality-score { font-size: 12px; }
+.saved-profile-picker { margin-bottom: 14px; }
+.saved-profile-picker label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; font-weight: var(--ft-weight-semibold); }
+.saved-profile-picker select {
+  width: 100%; min-height: 42px; padding: 9px 32px 9px 11px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; color: var(--ink); font: inherit; font-size: 13px;
+}
+.capture-progress { margin-top: 14px; }
+.capture-progress > div:first-child { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; color: var(--muted); font-size: 12px; }
+.capture-progress strong { white-space: nowrap; color: var(--ink); font-size: 12px; }
+.capture-progress-track { height: 5px; margin-top: 7px; overflow: hidden; border-radius: 999px; background: var(--ft-border); }
+.capture-progress-track span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--ft-brand); }
+.state-pill.saved { background: var(--ft-brand-soft); color: var(--ft-brand-active); }
+.state-pill.offline { color: var(--ft-neutral-700, #344054); background: var(--ft-surface-subtle); }
+.results-section { margin-top: 16px; }
+.results-heading { margin: 0 0 6px; color: var(--muted); font-size: 11px; font-weight: var(--ft-weight-semibold); letter-spacing: .07em; }
+.button { min-height: 64px; margin-top: 8px; padding: 11px 14px; border-radius: 13px; }
+.button strong { font-size: 14px; }
+.button small { margin-top: 3px; font-size: 11px; line-height: 1.45; opacity: .9; }
+.button-icon { width: 36px; height: 36px; border-radius: 11px; font-size: 19px; }
+.button-primary { box-shadow: var(--ft-shadow-xs); }
+.button-secondary { box-shadow: none; }
+.quick-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 9px; }
+.quick-links button {
+  min-height: 43px; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 8px 5px; border: 1px solid var(--line); border-radius: 10px;
+  color: var(--ft-neutral-700, #344054); background: #fff;
+  font: inherit; font-size: 12px; font-weight: var(--ft-weight-semibold); cursor: pointer;
+}
+.quick-links button span { color: var(--ft-brand); font-size: 16px; }
+.quick-links button:hover { border-color: var(--ft-brand); background: var(--ft-brand-soft); }
+.popup-advanced { margin-top: 15px; border-top: 1px solid var(--line); padding-top: 12px; }
+.popup-advanced > summary {
+  min-height: 40px; display: flex; align-items: center; cursor: pointer;
+  color: var(--ft-neutral-700, #344054); font-size: 12px;
+  font-weight: var(--ft-weight-semibold); list-style: none;
+}
+.popup-advanced > summary::-webkit-details-marker { display: none; }
+.popup-advanced > summary::after { content: "+"; margin-left: auto; color: var(--ft-brand); font-size: 18px; }
+.popup-advanced[open] > summary::after { content: "−"; }
+.popup-advanced .button { margin-top: 7px; }
+.popup-privacy { margin-top: 9px; font-size: 11px; line-height: 1.45; color: var(--muted); }
+.pending-summary, .message { font-size: 12px; }
+footer { margin-top: 13px; font-size: 11px; }
+footer .text-button { font-size: 11px; }
+@media (max-width: 400px) {
+  body { width: 100%; }
+  .popup-shell { padding: 14px; }
+  .quick-links button { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .button, .quick-links button { transition: none !important; }
+}
