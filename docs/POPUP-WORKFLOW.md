@@ -22,7 +22,7 @@ Se muestran tres etapas de progreso: primera captura, segunda captura/revisión 
 - **Actividad:** `#activity`, historial de cambios detectados.
 - **Opciones y administración:** incluye importación oficial, backups y controles del historial.
 
-El perfil seleccionado se conserva en el parámetro `profile` al navegar. El dashboard valida ese parámetro frente a los perfiles realmente guardados. Los nombres de usuario se restringen a caracteres válidos antes de construir enlaces.
+El último perfil elegido se recuerda localmente en `ft_popup_last_profile`. Cuando la pestaña activa es un perfil válido de Instagram, ese perfil tiene prioridad sobre la preferencia guardada.\n\nEl perfil seleccionado se conserva en el parámetro `profile` al navegar. El dashboard valida ese parámetro frente a los perfiles realmente guardados. Los nombres de usuario se restringen a caracteres válidos antes de construir enlaces.
 
 ## Después de guardar una captura
 
