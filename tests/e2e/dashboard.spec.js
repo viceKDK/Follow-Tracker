@@ -342,6 +342,20 @@ test("Antes y ahora filtra, pagina, abre detalle y exporta la vista", async ({ p
   expect(pageErrors).toEqual([]);
 });
 
+test("Antes y ahora muestra opciones simples y permite abrir filtros avanzados", async ({ page }) => {
+  const errors = await openDashboard(page, "relationships");
+  await expect(page.locator("#compare-custom-range")).not.toHaveAttribute("open", "");
+  await expect(page.locator("#more-relationship-filters")).not.toHaveAttribute("open", "");
+  await expect(page.locator('[data-preset="previous"]')).toBeVisible();
+  await page.locator("#compare-custom-range > summary").click();
+  await expect(page.locator("#compare-from")).toBeVisible();
+  await expect(page.locator("#compare-to")).toBeVisible();
+  await page.locator("#more-relationship-filters > summary").click();
+  await page.locator('[data-relationship-filter="mutual"]').click();
+  await expect(page.locator('[data-relationship-filter="mutual"]')).toHaveClass(/active/);
+  expect(errors).toEqual([]);
+});
+
 test("Actividad combina filtros, pagina y exporta solamente las coincidencias", async ({ page }) => {
   const pageErrors = await openDashboard(page, "activity");
   await page.locator('[data-view="activity"]').click();
@@ -403,6 +417,33 @@ test("Personas prioriza el resumen visual y una tabla compacta", async ({ page }
   await expect(page.locator(".people-current-table")).toContainText("Último cambio");
   await expect(page.locator(".people-current-table .profile-avatar img").first()).toHaveAttribute("src", /cdn\.instagram\.test/);
   expect(pageErrors).toEqual([]);
+});
+
+test("Personas agrupa estadísticas secundarias sin perder filtros", async ({ page }) => {
+  const errors = await openDashboard(page, "people");
+  await expect(page.locator("#people-summary .people-summary-card")).toHaveCount(6);
+  await expect(page.locator("#people-summary .people-summary-primary .people-summary-card")).toHaveCount(3);
+  await expect(page.locator("#people-summary .people-summary-extra .people-summary-card").first()).not.toBeVisible();
+  await page.locator("#people-extra-details > summary").click();
+  await expect(page.locator("#people-summary .people-summary-extra .people-summary-card").first()).toBeVisible();
+  await page.locator("#more-people-filters > summary").click();
+  await page.locator('[data-filter="mutual"]').click();
+  await expect(page.locator('[data-filter="mutual"]')).toHaveClass(/active/);
+  expect(errors).toEqual([]);
+});
+
+test("Actividad permite filtrar con un toque y mantiene filtros avanzados", async ({ page }) => {
+  const errors = await openDashboard(page, "activity");
+  await expect(page.locator("#activity-quick-filters")).toBeVisible();
+  await page.locator('[data-activity-quick="unfollowed_you"]').click();
+  await expect(page.locator('[data-activity-quick="unfollowed_you"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#activity-type")).toHaveValue("unfollowed_you");
+  await expect(page.locator(".activity-table tbody tr")).toHaveCount(1);
+  await page.locator('[data-activity-quick="all"]').click();
+  await expect(page.locator(".activity-table tbody tr")).toHaveCount(6);
+  await page.locator(".activity-disclosure > summary").click();
+  await expect(page.locator("#activity-report")).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test("Resumen muestra historial saludable y permite exportar el diagnóstico", async ({ page }) => {
