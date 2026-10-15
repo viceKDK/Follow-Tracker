@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="dashboard.css" />
     <link rel="stylesheet" href="dashboard-table.css" />
     <link rel="stylesheet" href="dashboard-recent.css" />
+    <link rel="stylesheet" href="dashboard-simple.css" />
   </head>
   <body>
     <div class="app-shell">
@@ -77,6 +78,11 @@
             <p class="eyebrow">PRIMERA CAPTURA</p>
             <h1>Todavía no hay reportes para comparar</h1>
             <p>Abre un perfil de Instagram y realiza el primer análisis. Esa captura será la referencia para saber qué cambió en los siguientes reportes.</p>
+            <ol class="empty-journey" aria-label="Cómo empezar en tres pasos">
+              <li><strong>1. Analizá un perfil</strong><span>Guardá la primera captura para conocer tus seguidores y seguidos.</span></li>
+              <li><strong>2. Repetí el análisis</strong><span>Con otra captura, Follow Tracker puede detectar qué cambió.</span></li>
+              <li><strong>3. Explorá los resultados</strong><span>Revisá Recientes, Antes y ahora o la Actividad.</span></li>
+            </ol>
             <button id="empty-open-instagram" class="button button-primary" type="button">Abrir Instagram</button>
           </section>
 
@@ -249,7 +255,9 @@
 
               <article class="panel relationship-panel">
                 <div class="comparison-toolbar">
-                  <div class="compare-controls">
+                  <details id="compare-custom-range" class="advanced-disclosure simple-range">
+                    <summary>Elegir otras fechas</summary>
+                    <div class="compare-controls">
                     <label>
                       <span>Reporte anterior</span>
                       <select id="compare-from" aria-label="Reporte anterior"></select>
@@ -259,7 +267,8 @@
                       <span>Reporte actual</span>
                       <select id="compare-to" aria-label="Reporte actual"></select>
                     </label>
-                  </div>
+                    </div>
+                  </details>
                   <p id="compare-caption" class="compare-caption">Seleccioná dos reportes.</p>
                 </div>
 
@@ -314,10 +323,15 @@
                       <button class="filter active" data-relationship-filter="changed" type="button">Cambiaron <span data-filter-count="changed">0</span></button>
                       <button class="filter" data-relationship-filter="followed-you" type="button">Te sigue ahora <span data-filter-count="followed-you">0</span></button>
                       <button class="filter" data-relationship-filter="unfollowed-you" type="button">Te dejó de seguir <span data-filter-count="unfollowed-you">0</span></button>
-                      <button class="filter" data-relationship-filter="you-follow" type="button">Solo lo seguís <span data-filter-count="you-follow">0</span></button>
-                      <button class="filter" data-relationship-filter="follows-you" type="button">Solo te sigue <span data-filter-count="follows-you">0</span></button>
-                      <button class="filter" data-relationship-filter="mutual" type="button">Se siguen <span data-filter-count="mutual">0</span></button>
-                      <button class="filter" data-relationship-filter="all" type="button">Todos <span data-filter-count="all">0</span></button>
+                      <details id="more-relationship-filters" class="advanced-disclosure simple-filter-more">
+                        <summary>Más relaciones</summary>
+                        <div class="filter-row">
+                          <button class="filter" data-relationship-filter="you-follow" type="button">Solo lo seguís <span data-filter-count="you-follow">0</span></button>
+                          <button class="filter" data-relationship-filter="follows-you" type="button">Solo te sigue <span data-filter-count="follows-you">0</span></button>
+                          <button class="filter" data-relationship-filter="mutual" type="button">Se siguen <span data-filter-count="mutual">0</span></button>
+                          <button class="filter" data-relationship-filter="all" type="button">Todos <span data-filter-count="all">0</span></button>
+                        </div>
+                      </details>
                     </div>
                   </div>
 
@@ -344,11 +358,16 @@
                   </label>
                   <div id="people-filters" class="filter-row" role="group" aria-label="Filtrar personas">
                     <button class="filter active" data-filter="all" type="button">Todos</button>
-                    <button class="filter" data-filter="unfollowed" type="button">Te dejó de seguir</button>
                     <button class="filter" data-filter="follows-you" type="button">Solo te sigue</button>
                     <button class="filter" data-filter="not-following-back" type="button">Solo lo seguís</button>
-                    <button class="filter" data-filter="mutual" type="button">Se siguen</button>
-                    <button class="filter" data-filter="historical" type="button">Ya no se siguen</button>
+                    <details id="more-people-filters" class="advanced-disclosure simple-filter-more">
+                      <summary>Más categorías</summary>
+                      <div class="filter-row">
+                        <button class="filter" data-filter="unfollowed" type="button">Te dejó de seguir</button>
+                        <button class="filter" data-filter="mutual" type="button">Se siguen</button>
+                        <button class="filter" data-filter="historical" type="button">Ya no se siguen</button>
+                      </div>
+                    </details>
                   </div>
                 </div>
                 <div id="people-list" class="people-list"></div>
