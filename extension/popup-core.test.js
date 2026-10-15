@@ -32,6 +32,16 @@ test("descubre perfiles con historial y ordena por fecha sin aceptar claves inv�
   assert.deepEqual(profiles, ["beto", "ana", "carla"]);
 });
 
+test("puede descubrir perfiles por claves sin cargar snapshots pesados", () => {
+  const keys = ["ft_history_beto", "ft_history_ana", "ft_timeline_beto", "ft_history_invalid-name"];
+  const metadata = {
+    ft_profile_meta_beto: { lastCaptureAt: "2026-10-12T10:00:00Z" },
+    ft_profile_meta_ana: { lastCaptureAt: "2026-10-10T10:00:00Z" },
+  };
+  assert.deepEqual(Popup.savedProfilesFromKeys(keys, metadata), ["beto", "ana"]);
+  assert.deepEqual(Popup.savedProfilesFromKeys(keys), ["ana", "beto"]);
+});
+
 test("la guía nunca marca como finalizada una captura pendiente o dudosa", () => {
   assert.deepEqual(Popup.journey(0, false), { step: 0, label: "Creá tu primera captura" });
   assert.equal(Popup.journey(1, false).step, 1);
