@@ -134,6 +134,15 @@ test("recuerda el último perfil seleccionado y prioriza la pestaña activa", as
   expect(remembered).toBe("ana");
 });
 
+test("el perfil abierto en Instagram tiene prioridad sobre el último guardado", async ({ page }) => {
+  const storage = { ...savedHistory(), ft_popup_last_profile: "martin" };
+  await installPopupMocks(page, { tabUrl: "https://www.instagram.com/ana/", storage });
+  await page.goto(popupUrl);
+  await expect(page.locator("#saved-profile-select")).toHaveValue("ana");
+  await expect(page.locator("#analyze-button")).toContainText("Actualizar captura");
+  await expect(page.locator("#profile-state")).toHaveText("En Instagram");
+});
+
 test("con storage.getKeys no carga todo el historial al abrir el popup", async ({ page }) => {
   await installPopupMocks(page, { storage: savedHistory(), fastKeys: true });
   await page.goto(popupUrl);
