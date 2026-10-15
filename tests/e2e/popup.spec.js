@@ -42,12 +42,13 @@ function serve(req, res) {
   });
 }
 
-async function installPopupMocks(page, { tabUrl = "https://example.com/", storage = {} } = {}) {
-  await page.addInitScript(({ currentTabUrl, initial }) => {
+async function installPopupMocks(page, { tabUrl = "https://example.com/", storage = {}, fastKeys = false } = {}) {
+  await page.addInitScript(({ currentTabUrl, initial, enableFastKeys }) => {
     const data = JSON.parse(JSON.stringify(initial));
     const opened = [];
     const messages = [];
-    globalThis.__popupTest = { opened, messages, data };
+    const reads = [];
+    globalThis.__popupTest = { opened, messages, reads, data };
     globalThis.close = () => {};
     globalThis.chrome = {
       tabs: {
@@ -65,6 +66,7 @@ async function installPopupMocks(page, { tabUrl = "https://example.com/", storag
       storage: {
         local: {
           get: (keys, callback) => {
+            reads.push(keys);
             if (keys == null) return callback({ ...data });
             const names = typeof keys === "string" ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys || {});
             return callback(names.reduce((result, key) => {
@@ -75,7 +77,8 @@ async function installPopupMocks(page, { tabUrl = "https://example.com/", storag
         },
       },
     };
-  }, { currentTabUrl: tabUrl, initial: storage });
+    if (enableFastKeys) globalThis.chrome.storage.local.getKeys = async () => Object.keys(data);
+  }, { currentTabUrl: tabUrl, initial: storage, enableFastKeys: fastKeys });
 }
 
 test.beforeAll(async () => {
@@ -117,6 +120,17 @@ test("fuera de Instagram permite elegir datos guardados y abrir cada resultado",
   await expect.poll(() => page.evaluate(() => globalThis.__popupTest.opened.length)).toBe(5);
   expect((await page.evaluate(() => globalThis.__popupTest.opened.at(-1)))).toBe("https://www.instagram.com/martin/");
   expect(await page.evaluate(() => globalThis.__popupTest.messages)).toEqual([]);
+});
+
+test("con storage.getKeys no carga todo el historial al abrir el popup", async ({ page }) => {
+  await installPopupMocks(page, { storage: savedHistory(), fastKeys: true });
+  await page.goto(popupUrl);
+  await expect(page.locator("#saved-profile-select")).toHaveValue("ana");
+  await expect(page.locator("#followers-count")).toHaveText("2");
+  const reads = await page.evaluate(() => globalThis.__popupTest.reads);
+  expect(reads).not.toContain(null);
+  expect(reads.some((keys) => Array.isArray(keys) && keys.includes("ft_history_ana") && keys.includes("ft_timeline_ana"))).toBe(true);
+  expect(reads.some((keys) => Array.isArray(keys) && keys.includes("ft_history_martin"))).toBe(false);
 });
 
 test("en el perfil correcto inicia revisión antes de capturar", async ({ page }) => {
