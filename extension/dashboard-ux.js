@@ -444,8 +444,8 @@
   }, { id: "ux.profile" });
 
   if (!location.hash) {
-    state.view = "relationships";
-    activateView("relationships", false);
+    state.view = "overview";
+    activateView("overview", false);
   }
 
   document.addEventListener("click", (event) => {
@@ -595,7 +595,7 @@
 
   setTimeout(() => {
     ensureControls();
-    if (!location.hash) activateView("relationships", false);
+    if (!location.hash) activateView("overview", false);
     if (state.relationshipTransitions.length) renderRelationshipTable();
     if (state.people.length) renderPeopleTable();
   }, 0);
