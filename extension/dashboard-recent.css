@@ -1,0 +1,77 @@
+/* Simple and accessible "Recientes" directory, scoped to avoid modifying other views. */
+#recent .recent-layout { display: grid; gap: 18px; }
+#recent .recent-intro {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 17px 20px; border: 1px solid var(--ft-border, #e4e7ec);
+  border-radius: 16px; background: linear-gradient(115deg, #f2f0ff, #fff 66%);
+}
+#recent .recent-intro strong { display: block; color: var(--ft-text, #182230); font-size: 15px; }
+#recent .recent-intro p { margin: 4px 0 0; max-width: 760px; color: var(--ft-text-secondary, #667085); font-size: 13px; line-height: 1.6; }
+#recent .recent-intro-icon { display: grid; place-items: center; flex-shrink: 0; width: 46px; height: 46px; border-radius: 14px; background: #e4e0ff; color: #5148e5; font-size: 23px; }
+#recent .recent-browser { padding: 22px; }
+#recent .recent-browser-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between; }
+#recent .recent-browser-head h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+#recent .recent-browser-head p { margin: 6px 0 0; font-size: 13px; color: var(--ft-text-secondary, #667085); }
+#recent .recent-switch {
+  display: inline-flex; gap: 5px; padding: 5px; margin: 20px 0 18px;
+  border: 1px solid var(--ft-border, #e4e7ec); border-radius: 14px; background: var(--ft-neutral-50, #f7f8fa);
+}
+#recent .recent-switch button {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 42px; padding: 10px 16px;
+  border: 0; border-radius: 10px; color: #475467; background: transparent;
+  cursor: pointer; font: 650 14px var(--ft-font-sans, sans-serif);
+}
+#recent .recent-switch button.active { background: #fff; color: #4338ca; box-shadow: var(--ft-shadow-sm, 0 4px 12px rgba(16,24,40,.06)); }
+#recent .recent-segment-count { padding: 3px 7px; border-radius: 999px; background: #eceafe; color: #4338ca; font-size: 12px; font-variant-numeric: tabular-nums; }
+#recent .recent-tools {
+  display: grid; grid-template-columns: minmax(220px, 1fr) minmax(165px, 220px) minmax(150px, 205px);
+  gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--ft-border, #e4e7ec);
+}
+#recent .recent-tools label { display: grid; min-width: 0; gap: 6px; color: #475467; font-size: 12px; font-weight: 650; }
+#recent .recent-tools input,#recent .recent-tools select {
+  box-sizing: border-box; width: 100%; min-height: 44px; padding: 9px 12px;
+  border: 1px solid #d0d5dd; border-radius: 11px; outline: none;
+  background: #fff; color: #182230; font: 500 14px var(--ft-font-sans, sans-serif);
+}
+#recent .recent-tools :is(input,select):focus-visible { border-color: #635bff; box-shadow: var(--ft-focus-ring, 0 0 0 3px rgba(99,91,255,.18)); }
+#recent .recent-results-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 16px 0 6px; }
+#recent #recent-count { color: var(--ft-text, #182230); font-size: 14px; font-weight: 700; }
+#recent #recent-message { color: #667085; font-size: 12px; }
+#recent .recent-person { display: flex; align-items: center; gap: 13px; padding: 12px 2px; border-bottom: 1px solid #eaecf0; }
+#recent .recent-person-main { min-width: 0; flex: 1; }
+#recent .recent-person-main strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: #182230; }
+#recent .recent-person-main small { display: block; margin-top: 5px; line-height: 1.45; font-size: 12px; color: #667085; }
+#recent .recent-avatar { width: 44px; height: 44px; min-width: 44px; font-size: 12px; }
+#recent .recent-chip { max-width: 180px; padding: 7px 10px; border-radius: 999px; background: #f1f4f8; color: #475467; font-size: 11px; font-weight: 700; text-align: center; }
+#recent .recent-chip-new { color: #086a4f; background: #e9fbf3; }
+#recent .recent-chip-unknown { color: #8b5a12; background: #fff8eb; }
+#recent .recent-person-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#recent .recent-person-actions :is(button,a) {
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 38px;
+  padding: 8px 12px; border: 1px solid #d0d5dd; border-radius: 9px; background: #fff; color: #344054;
+  font: 650 12px var(--ft-font-sans, sans-serif); text-decoration: none; cursor: pointer;
+}
+#recent .recent-person-actions :is(button,a):hover { background: #f0efff; border-color: #ada6ff; color: #4338ca; }
+#recent .recent-empty { display: grid; justify-items: center; gap: 8px; padding: 52px 20px; text-align: center; color: #667085; }
+#recent .recent-empty>span { font-size: 32px; color: #635bff; }
+#recent .recent-empty strong { font-size: 17px; color: #182230; }
+#recent .recent-empty p { margin: 0; max-width: 420px; font-size: 13px; line-height: 1.55; }
+#recent .recent-pagination { display: flex; justify-content: center; margin-top: 20px; }
+#recent .recent-pagination button { min-height: 44px; padding: 10px 24px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; font-weight: 700; cursor: pointer; }
+#recent :is(button,a):focus-visible { outline: 3px solid rgba(99,91,255,.45); outline-offset: 2px; }
+@media (max-width: 900px) { #recent .recent-tools { grid-template-columns: repeat(2,minmax(0,1fr)); } #recent .recent-tools label:first-child { grid-column: 1/-1; } }
+@media (max-width: 640px) {
+  #recent .recent-browser { padding: 16px; }
+  #recent .recent-intro { padding: 14px; align-items: flex-start; }
+  #recent .recent-intro-icon { display: none; }
+  #recent .recent-switch { display: flex; width: 100%; box-sizing: border-box; }
+  #recent .recent-switch button { flex: 1; justify-content: center; padding: 10px; font-size: 13px; }
+  #recent .recent-tools { grid-template-columns: 1fr; }
+  #recent .recent-tools label:first-child { grid-column: auto; }
+  #recent .recent-person { align-items: flex-start; flex-wrap: wrap; }
+  #recent .recent-person-main { flex: 1; min-width: calc(100% - 65px); }
+  #recent .recent-chip { margin-left: 57px; }
+  #recent .recent-person-actions { margin-left: auto; width: 100%; padding-left: 57px; }
+  #recent .recent-person-actions :is(button,a) { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { #recent * { transition: none !important; } }
