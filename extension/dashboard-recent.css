@@ -75,3 +75,5 @@
   #recent .recent-person-actions :is(button,a) { flex: 1; }
 }
 @media (prefers-reduced-motion: reduce) { #recent * { transition: none !important; } }
+
+#overview .overview-recent-link { display: inline-flex; align-items: center; margin-top: 14px; min-height: 40px; font-size: 13px; }
