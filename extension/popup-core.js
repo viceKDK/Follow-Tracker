@@ -62,7 +62,7 @@
     if (!count) return { step: 0, label: pending ? "Revisá tu primera captura" : "Creá tu primera captura" };
     if (pending) return { step: Math.min(count, 2), label: "Tenés una captura pendiente de revisión" };
     if (count === 1) return { step: 1, label: "Repetí el análisis para ver cambios" };
-    if (["review", "suspicious", "rejected"].includes(qualityStatus)) {
+    if (qualityStatus !== "trusted") {
       return { step: 2, label: "Revisá la calidad de tu historial" };
     }
     return { step: 3, label: "Historial listo para explorar" };
