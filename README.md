@@ -18,6 +18,7 @@
 Follow Tracker guarda capturas locales de los seguidores y seguidos de un perfil y compara cómo cambió cada relación con el tiempo.
 
 - Muestra quién empezó o dejó de seguirte.
+- **Recientes:** explorá seguidores y seguidos detectados entre capturas; ordená por fecha de detección o nombre y buscá cuentas.
 - Detecta a quién seguís sin reciprocidad y quién te sigue sin que lo sigas.
 - Compara cualquier reporte anterior con uno más reciente.
 - Revisa cobertura, fuente y anomalías antes de guardar una captura.
@@ -126,6 +127,12 @@ Guardá el reporte cuando los datos sean confiables. Después podés abrir **Ver
 ![Confirmación de un reporte guardado correctamente](docs/usage-04-saved.png)
 
 La primera captura funciona como línea de base. Los cambios aparecen cuando guardás una captura posterior del mismo perfil.
+
+## Consultar seguidores y seguidos recientes
+
+Desde el dashboard, abrí **Recientes**. Alterná entre **Seguidores** y **Seguidos** y elegí si querés ver los detectados después de la primera captura, los nuevos en el último reporte o todas las cuentas actuales. Podés ordenar por fecha detectada (más nueva o antigua) y alfabéticamente, buscar usuarios y abrir su historial o perfil en Instagram.
+
+**Importante:** la fecha del reporte representa cuándo se observó el cambio, no la fecha exacta del follow. Los usuarios que ya estaban en la primera captura se muestran sin fecha verificable; Instagram no garantiza el orden cronológico de estas listas para cualquier perfil. El explorador no añade solicitudes, almacenamiento ni permisos. [Ver alcance de esta función](docs/RECENT-VIEW.md).
 
 ## Cómo protege el historial
 
