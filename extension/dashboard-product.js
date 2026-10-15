@@ -121,6 +121,11 @@
       "beforebegin",
       `<div id="activity-controls" class="activity-controls">
         <label class="search-box activity-search"><span aria-hidden="true">⌕</span><input id="activity-search" type="search" placeholder="Buscar usuario o reporte…" autocomplete="off" /></label>
+        <div id="activity-quick-filters" class="activity-quick-filters" role="group" aria-label="Filtrar actividad por tipo">
+          <button class="active" data-activity-quick="all" type="button" aria-pressed="true">Todos</button>
+          <button data-activity-quick="followed_you" type="button" aria-pressed="false">Te siguió</button>
+          <button data-activity-quick="unfollowed_you" type="button" aria-pressed="false">Te dejó de seguir</button>
+        </div>
         <details class="advanced-disclosure activity-disclosure">
           <summary>Filtros avanzados</summary>
           <div class="activity-advanced">
@@ -162,6 +167,11 @@
 
   function renderActivityEnhanced() {
     ensureActivityControls();
+    document.querySelectorAll("[data-activity-quick]").forEach((button) => {
+      const selected = button.dataset.activityQuick === activity.type;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
     const target = document.querySelector("#activity-list");
     if (!target) return;
 
@@ -252,7 +262,14 @@
       ["Solo los seguís", summary.followingOnly, "Vos los seguís, pero ellos no te siguen", "metric-following-only-v4.png", "following-only"],
       ["Te dejaron de seguir", lost, "Desde el reporte anterior", "metric-unfollowed-v4.png", "unfollowed"],
     ];
-    target.innerHTML = cards.map(([label, value, note, asset, tone]) => `<article class="people-summary-card people-summary-${tone}"><img src="icons/${asset}" alt="" /><span><small>${escapeHtml(label)}</small><strong>${formatNumber(value)}</strong><em>${escapeHtml(note)}</em></span></article>`).join("");
+    const moreOpen = target.querySelector("#people-extra-details")?.open === true;
+    const cardMarkup = ([label, value, note, asset, tone]) =>
+      `<article class="people-summary-card people-summary-${tone}"><img src="icons/${asset}" alt="" /><span><small>${escapeHtml(label)}</small><strong>${formatNumber(value)}</strong><em>${escapeHtml(note)}</em></span></article>`;
+    target.innerHTML = `<div class="people-summary-primary">${cards.slice(0, 3).map(cardMarkup).join("")}</div>
+      <details id="people-extra-details" class="advanced-disclosure people-extra-details"${moreOpen ? " open" : ""}>
+        <summary>Ver más estadísticas de relaciones</summary>
+        <div class="people-summary-extra">${cards.slice(3).map(cardMarkup).join("")}</div>
+      </details>`;
   }
 
   function resetActivityFilters() {
@@ -303,6 +320,16 @@
 
   document.addEventListener("click", (event) => {
     const target = event.target;
+    const quick = target.closest("[data-activity-quick]");
+    if (quick) {
+      activity.type = quick.dataset.activityQuick;
+      activity.page = 1;
+      const typeSelect = document.querySelector("#activity-type");
+      if (typeSelect) typeSelect.value = activity.type;
+      invalidateActivityCache();
+      renderActivityEnhanced();
+      return;
+    }
     if (target.closest("#clear-activity")) {
       resetActivityFilters();
       return;
